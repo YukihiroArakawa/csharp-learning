@@ -29,25 +29,31 @@ Java の基礎（オブジェクト指向、HTTP、DI、ORM、テスト）は既
 .
 ├── README.md
 ├── 00-environment/
+│   ├── .envrc                        # direnv でこのフェーズの flake を有効化
 │   ├── flake.nix                     # .NET SDK
 │   └── hello-dotnet/                 # CLI、csproj、基本コマンドの確認
 ├── 01-csharp-differences/
+│   ├── .envrc
 │   ├── flake.nix                     # .NET SDK、C# LSP
 │   ├── TypeSystemSamples/            # null、class / struct / record、property
 │   ├── LinqSamples/                  # IEnumerable、LINQ、遅延実行
 │   ├── AsyncSamples/                 # Task、async / await、CancellationToken
 │   └── CSharpDifferences.Tests/      # 差分の挙動を固定するテスト
 ├── 02-dotnet-foundations/
+│   ├── .envrc
 │   ├── flake.nix                     # .NET SDK、C# LSP、デバッガ
 │   └── HostedWorker/                 # Generic Host、DI、Options、ログ、停止処理
 ├── 03-aspnet-core/
+│   ├── .envrc
 │   ├── flake.nix                     # .NET SDK、C# LSP、デバッガ
 │   ├── MinimalApiSample/             # Minimal API の基本
 │   └── ControllerApiSample/          # Controller 形式との比較
 ├── 04-data-and-testing/
+│   ├── .envrc
 │   ├── flake.nix                     # .NET SDK、C# LSP、デバッガ、SQLite CLI
 │   └── TodoApiWithEfCore/            # EF Core、migration、単体・統合テスト
 └── 05-capstone/
+    ├── .envrc
     ├── flake.nix                     # .NET SDK、C# LSP、デバッガ、SQLite CLI
     └── TaskManagementApi/            # 最終課題の業務 API
 ```
@@ -56,13 +62,15 @@ Java の基礎（オブジェクト指向、HTTP、DI、ORM、テスト）は既
 
 ### Nix / flake の方針
 
-開発ツールはフェーズごとの `flake.nix` で管理します。これにより「この演習で何が必要か」を依存関係からも把握できます。各フェーズで作業を始めるときは、そのディレクトリに移動して開発シェルに入ります。
+開発ツールはフェーズごとの `flake.nix` で管理します。これにより「この演習で何が必要か」を依存関係からも把握できます。各フェーズには `.envrc` があり、ディレクトリへ入るだけで対応する開発環境が有効になります。
 
 ```bash
 cd 01-csharp-differences
-nix develop
+direnv allow
 dotnet --info
 ```
+
+`.envrc` の初回利用時、または内容を変更した後だけ `direnv allow` を実行します。以後は対象ディレクトリへ `cd` するだけでよく、手動の `nix develop` は不要です。
 
 各フェーズの依存関係は次のように増やします。
 
@@ -75,13 +83,13 @@ dotnet --info
 | `04-data-and-testing` | SDK + LSP + デバッガ + `sqlite` | EF Core が作る SQLite DB と migration を観察する |
 | `05-capstone` | `04` と同じ | 最終課題で API・DB・デバッグを一通り使う |
 
-各 flake は独立した `flake.lock` を持てます。まず `nix develop` を実行した時点で作成・固定します。意図的にフェーズ単位で更新できる一方、SDK バージョンを揃えたい場合は、すべての flake で同じ `nixpkgs` revision を使うよう lock を更新します。
+各 flake は独立した `flake.lock` を持てます。最初の `direnv allow` で作成・固定します。意図的にフェーズ単位で更新できる一方、SDK バージョンを揃えたい場合は、すべての flake で同じ `nixpkgs` revision を使うよう lock を更新します。
 
 ### Neovim のセットアップ
 
-フル IDE は不要です。対象フェーズの `nix develop` 内で Neovim を起動し、C# ファイルを開くと `csharp-ls` が attach する構成にします。既存の Neovim 設定で `csharp-ls` は有効になっています。
+フル IDE は不要です。対象フェーズで direnv により環境を有効にした状態で Neovim を起動し、C# ファイルを開くと `csharp-ls` が attach する構成にします。既存の Neovim 設定で `csharp-ls` は有効になっています。
 
-- [ ] `01-csharp-differences` で `nix develop` に入り、`dotnet --info` と `csharp-ls --version` を実行する。
+- [ ] `01-csharp-differences` で `direnv allow` を実行し、`dotnet --info` と `csharp-ls --version` を実行する。
 - [ ] `02-dotnet-foundations` で `netcoredbg --version` を実行する。
 - [ ] `*.cs` ファイルを開き、`:checkhealth vim.lsp` で LSP の状態を確認する。
 - [ ] `gd`（定義ジャンプ）、`gr`（参照検索）、`K`（ホバー）、`<leader>rn`（リネーム）、`<leader>ca`（コードアクション）を試す。
@@ -94,7 +102,7 @@ dotnet --info
 
 ### 0. 開発環境と CLI
 
-- [ ] `00-environment` の `nix develop` で .NET SDK を利用できるようにする。
+- [ ] `00-environment` の `direnv allow` で .NET SDK を利用できるようにする。
 - [ ] `dotnet --info` で SDK / runtime の構成を確認する。
 - [ ] `dotnet new console` でプロジェクトを作り、`build` と `run` を実行する。
 - [ ] `dotnet new webapi` でプロジェクトを作り、`run` して OpenAPI UI またはエンドポイントを確認する。
