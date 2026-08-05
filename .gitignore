@@ -1,0 +1,23 @@
+# direnv のローカル環境キャッシュ
+.direnv/
+
+# .NET のビルド成果物
+**/bin/
+**/obj/
+
+# テスト・コードカバレッジの生成物
+**/TestResults/
+coverage/
+coverage*.xml
+
+# NuGet パッケージのビルド成果物
+*.nupkg
+*.snupkg
+
+# Visual Studio / Rider のローカル設定
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
