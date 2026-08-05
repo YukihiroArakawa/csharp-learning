@@ -105,7 +105,7 @@ dotnet --info
 - [x] `00-environment` の `direnv allow` で .NET SDK を利用できるようにする。
 - [x] `dotnet --info` で SDK / runtime の構成を確認する。
 - [x] `dotnet new console` でプロジェクトを作り、`build` と `run` を実行する。
-- [ ] `dotnet new webapi` でプロジェクトを作り、`run` して OpenAPI UI またはエンドポイントを確認する。
+- [x] `dotnet new webapi` でプロジェクトを作り、`run` して OpenAPI UI またはエンドポイントを確認する。
 - [ ] `dotnet restore`、`build`、`test`、`watch`、`format` を実行する。
 - [ ] `*.csproj` の `TargetFramework`、`PackageReference`、`Nullable`、`ImplicitUsings` を説明できる。
 
