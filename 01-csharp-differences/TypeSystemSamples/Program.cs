@@ -26,3 +26,16 @@ Console.WriteLine(recordStructSecond.Name);
 
 Console.WriteLine(new PersonStruct("Ada").Equals(new PersonStruct("Ada")));
 Console.WriteLine(new PersonRecordStruct("Ada").Equals(new PersonRecordStruct("Ada")));
+
+// PropertySample
+Console.WriteLine("[Property Sample]");
+
+var autoPropertyPerson = new AutoPropertyPerson();
+autoPropertyPerson.Name = "Ada";
+Console.WriteLine(autoPropertyPerson.Name);
+
+var initOnlyPerson = new InitOnlyPerson { Name = "Grace" };
+Console.WriteLine(initOnlyPerson.Name);
+
+var primaryConstructorPerson = new PrimaryConstructorPerson("Lin");
+Console.WriteLine(primaryConstructorPerson.Name);
