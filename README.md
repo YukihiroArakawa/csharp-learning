@@ -107,7 +107,7 @@ dotnet --info
 - [x] `dotnet new console` でプロジェクトを作り、`build` と `run` を実行する。
 - [x] `dotnet new webapi` でプロジェクトを作り、`run` して OpenAPI UI またはエンドポイントを確認する。
 - [x] `dotnet restore`、`build`、`test`、`watch`、`format` を実行する。
-- [ ] `*.csproj` の `TargetFramework`、`PackageReference`、`Nullable`、`ImplicitUsings` を説明できる。
+- [x] `*.csproj` の `TargetFramework`、`PackageReference`、`Nullable`、`ImplicitUsings` を説明できる。
 
 ### 1. C# の型と構文
 
