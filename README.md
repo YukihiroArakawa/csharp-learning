@@ -111,7 +111,7 @@ dotnet --info
 
 ### 1. C# の型と構文
 
-- [ ] nullable reference types（`string` / `string?`）とコンパイラー警告を確認する。
+- [x] nullable reference types（`string` / `string?`）とコンパイラー警告を確認する。
 - [ ] `class`、`struct`、`record`、`record struct` の等価性と代入時の挙動を比較する。
 - [ ] auto-property、`init`、primary constructor を使った型を読む・書く。
 - [ ] `using` / `await using` で `IDisposable` / `IAsyncDisposable` を確実に破棄する。
