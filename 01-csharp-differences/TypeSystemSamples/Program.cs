@@ -39,3 +39,16 @@ Console.WriteLine(initOnlyPerson.Name);
 
 var primaryConstructorPerson = new PrimaryConstructorPerson("Lin");
 Console.WriteLine(primaryConstructorPerson.Name);
+
+// ResourceSamples
+Console.WriteLine("[Resource Sample]");
+
+using (var syncResource = new SyncResource("sync"))
+{
+    syncResource.Use();
+}
+
+await using (var asyncResource = new AsyncResource("async"))
+{
+    asyncResource.Use();
+}
