@@ -88,3 +88,15 @@ foreach (var group in tasksByCategory)
 
 var firstDotnetTask = tasks.FirstOrDefault(task => task.Category == ".NET");
 Console.WriteLine(firstDotnetTask?.Title ?? "not found");
+
+Console.WriteLine("[IEnumerable / IQueryable Sample]");
+
+IEnumerable<LearningTask> enumerableTasks = tasks;
+var enumerableQuery = enumerableTasks.Where(task => !task.IsDone);
+
+IQueryable<LearningTask> queryableTasks = tasks.AsQueryable();
+var queryableQuery = queryableTasks.Where(task => !task.IsDone);
+
+Console.WriteLine(string.Join(", ", enumerableQuery.Select(task => task.Title)));
+Console.WriteLine(string.Join(", ", queryableQuery.Select(task => task.Title)));
+Console.WriteLine(queryableQuery.Expression);
