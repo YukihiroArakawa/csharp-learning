@@ -115,7 +115,7 @@ dotnet --info
 - [x] `class`、`struct`、`record`、`record struct` の等価性と代入時の挙動を比較する。
 - [x] auto-property、`init`、primary constructor を使った型を読む・書く。
 - [x] `using` / `await using` で `IDisposable` / `IAsyncDisposable` を確実に破棄する。
-- [ ] LINQ の `Select`、`Where`、`GroupBy`、`FirstOrDefault` を使い、遅延実行を確認する。
+- [x] LINQ の `Select`、`Where`、`GroupBy`、`FirstOrDefault` を使い、遅延実行を確認する。
 - [ ] `IEnumerable<T>` と `IQueryable<T>` の違いを説明できる。
 - [ ] `async` / `await` と `Task` を用いた I/O 処理を実装する。
 - [ ] `CancellationToken` を受け取り、キャンセル可能な処理を実装する。

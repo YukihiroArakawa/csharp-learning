@@ -52,3 +52,39 @@ await using (var asyncResource = new AsyncResource("async"))
 {
     asyncResource.Use();
 }
+
+// LINQ Sample
+Console.WriteLine("[LINQ Sample]");
+
+var tasks = new List<LearningTask>
+{
+    new("C#", "nullable reference types", true),
+    new("C#", "LINQ", false),
+    new(".NET", "DI", false),
+    new(".NET", "Configuration", true),
+};
+
+var unfinishedTitles = tasks
+    .Where(task =>
+    {
+        Console.WriteLine($"filtering: {task.Title}");
+        return !task.IsDone;
+    })
+    .Select(task => task.Title);
+
+Console.WriteLine("query created");
+
+foreach (var title in unfinishedTitles)
+{
+    Console.WriteLine($"unfinished: {title}");
+}
+
+var tasksByCategory = tasks.GroupBy(task => task.Category);
+
+foreach (var group in tasksByCategory)
+{
+    Console.WriteLine($"{group.Key}: {group.Count()} tasks");
+}
+
+var firstDotnetTask = tasks.FirstOrDefault(task => task.Category == ".NET");
+Console.WriteLine(firstDotnetTask?.Title ?? "not found");
