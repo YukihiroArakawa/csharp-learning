@@ -170,7 +170,7 @@ dotnet format TypeSystemSamples/TypeSystemSamples.csproj
 - [x] LINQ の `Select`、`Where`、`GroupBy`、`FirstOrDefault` を使い、遅延実行を確認する。
 - [x] `IEnumerable<T>` と `IQueryable<T>` の違いを説明できる。
 - [x] `async` / `await` と `Task` を用いた I/O 処理を実装する。
-- [ ] `CancellationToken` を受け取り、キャンセル可能な処理を実装する。
+- [x] `CancellationToken` を受け取り、キャンセル可能な処理を実装する。
 - [ ] `switch` 式とパターンマッチングを用いた分岐を書く。
 - [ ] 上記差分の最小コードにテストを付ける。
 

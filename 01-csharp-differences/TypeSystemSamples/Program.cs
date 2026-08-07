@@ -109,3 +109,18 @@ Console.WriteLine("task created");
 
 var message = await messageTask;
 Console.WriteLine(message);
+
+Console.WriteLine("[Cancellation Sample]");
+
+using var cancellationSource = new CancellationTokenSource();
+cancellationSource.CancelAfter(TimeSpan.FromMilliseconds(100));
+
+try
+{
+    var result = await AsyncSamples.WaitForMessageAsync(cancellationSource.Token);
+    Console.WriteLine(result);
+}
+catch (OperationCanceledException)
+{
+    Console.WriteLine("cancelled");
+}

@@ -7,4 +7,10 @@ public static class AsyncSamples
         await File.WriteAllTextAsync(path, "Hello from async file I/O");
         return await File.ReadAllTextAsync(path);
     }
+
+    public static async Task<string> WaitForMessageAsync(CancellationToken cancellationToken)
+    {
+        await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+        return "completed";
+    }
 }
