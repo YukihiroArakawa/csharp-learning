@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+if ! git diff --cached --name-only --diff-filter=ACMR | grep -Eq '\.cs$'; then
+  exit 0
+fi
+
+exec nix develop . --command bash -c '
+  set -euo pipefail
+
+  while IFS= read -r -d "" project; do
+    echo "Checking format: $project"
+    dotnet format "$project" --verify-no-changes --no-restore
+  done < <(find . -path "*/obj" -prune -o -name "*.csproj" -print0)
+'

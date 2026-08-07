@@ -27,6 +27,9 @@ Java の基礎（オブジェクト指向、HTTP、DI、ORM、テスト）は既
 
 ```text
 .
+├── .envrc                         # リポジトリ横断ツール用の direnv 設定
+├── .githooks/pre-commit           # C# の staged changes をフォーマット検証
+├── flake.nix                      # 横断ツール用（dotnet format）
 ├── README.md
 ├── 00-environment/
 │   ├── .envrc                        # direnv でこのフェーズの flake を有効化
@@ -62,7 +65,7 @@ Java の基礎（オブジェクト指向、HTTP、DI、ORM、テスト）は既
 
 ### Nix / flake の方針
 
-開発ツールはフェーズごとの `flake.nix` で管理します。これにより「この演習で何が必要か」を依存関係からも把握できます。各フェーズには `.envrc` があり、ディレクトリへ入るだけで対応する開発環境が有効になります。
+開発ツールは原則としてフェーズごとの `flake.nix` で管理します。これにより「この演習で何が必要か」を依存関係からも把握できます。各フェーズには `.envrc` があり、ディレクトリへ入るだけで対応する開発環境が有効になります。
 
 ```bash
 cd 01-csharp-differences
@@ -84,6 +87,23 @@ dotnet --info
 | `05-capstone` | `04` と同じ | 最終課題で API・DB・デバッグを一通り使う |
 
 各 flake は独立した `flake.lock` を持てます。最初の `direnv allow` で作成・固定します。意図的にフェーズ単位で更新できる一方、SDK バージョンを揃えたい場合は、すべての flake で同じ `nixpkgs` revision を使うよう lock を更新します。
+
+### フォーマット検証フック
+
+ルートの `flake.nix` はフェーズ固有ではない横断ツール用です。`dotnet format` を使う Git の pre-commit フックを提供しますが、各フェーズが必要とする LSP、デバッガ、SQLite などの依存は引き続き各フェーズの flake に置きます。
+
+初回だけリポジトリ直下で次を実行します。
+
+```bash
+direnv allow
+git config --local core.hooksPath .githooks
+```
+
+以後、ステージ済みの C# ファイルを含むコミット時に、全 `.csproj` に対して `dotnet format --verify-no-changes --no-restore` が実行されます。整形が必要ならコミットは中止されるため、先に対象プロジェクトで次を実行します。
+
+```bash
+dotnet format TypeSystemSamples/TypeSystemSamples.csproj
+```
 
 ### Neovim のセットアップ
 
