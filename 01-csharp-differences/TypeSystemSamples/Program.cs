@@ -124,3 +124,12 @@ catch (OperationCanceledException)
 {
     Console.WriteLine("cancelled");
 }
+
+
+Console.WriteLine("[Pattern Sample]");
+
+Console.WriteLine(PatternSamples.Describe(null));
+Console.WriteLine(PatternSamples.Describe(-1));
+Console.WriteLine(PatternSamples.Describe(42));
+Console.WriteLine(PatternSamples.Describe("C#"));
+Console.WriteLine(PatternSamples.Describe(DateTime.Today));

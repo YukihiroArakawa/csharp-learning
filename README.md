@@ -171,7 +171,7 @@ dotnet format TypeSystemSamples/TypeSystemSamples.csproj
 - [x] `IEnumerable<T>` と `IQueryable<T>` の違いを説明できる。
 - [x] `async` / `await` と `Task` を用いた I/O 処理を実装する。
 - [x] `CancellationToken` を受け取り、キャンセル可能な処理を実装する。
-- [ ] `switch` 式とパターンマッチングを用いた分岐を書く。
+- [x] `switch` 式とパターンマッチングを用いた分岐を書く。
 - [ ] 上記差分の最小コードにテストを付ける。
 
 ### 2. ランタイムと標準基盤
