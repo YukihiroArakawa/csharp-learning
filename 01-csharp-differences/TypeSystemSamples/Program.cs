@@ -100,3 +100,12 @@ var queryableQuery = queryableTasks.Where(task => !task.IsDone);
 Console.WriteLine(string.Join(", ", enumerableQuery.Select(task => task.Title)));
 Console.WriteLine(string.Join(", ", queryableQuery.Select(task => task.Title)));
 Console.WriteLine(queryableQuery.Expression);
+
+
+Console.WriteLine("[Async Sample]");
+
+var messageTask = AsyncSamples.ReadMessageAsync();
+Console.WriteLine("task created");
+
+var message = await messageTask;
+Console.WriteLine(message);
