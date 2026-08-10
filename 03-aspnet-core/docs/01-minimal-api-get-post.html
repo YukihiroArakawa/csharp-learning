@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Minimal APIでGETとPOSTを作る</title>
+  <link rel="stylesheet" href="task.css">
+</head>
+<body>
+  <main>
+    <h1>Minimal APIでGETとPOSTを作る</h1>
+
+    <section aria-labelledby="overview">
+      <h2 id="overview">今回の課題</h2>
+      <ul>
+        <li>目安時間：35〜45分</li>
+        <li>前提：Generic Host、record、ラムダ式を読める</li>
+        <li>目的：HTTPのGETとPOSTがMinimal APIのコードへ対応する流れを理解する</li>
+      </ul>
+      <p>
+        CodexがインメモリのタスクAPIを実装します。学習者はGETとPOSTを実行し、
+        HTTPリクエスト、endpoint、レスポンスの対応をコードから追います。
+        詳細なモデルbinding、validation、OpenAPIは後続課題で扱います。
+      </p>
+    </section>
+
+    <section aria-labelledby="mental-model">
+      <h2 id="mental-model">最初に押さえる全体像</h2>
+      <p>
+        Web APIは、HTTPリクエストを受け取り、その内容に対応する処理を選び、
+        HTTPレスポンスを返すアプリケーションです。今回のAPIで選択条件になるのは、
+        HTTP methodとpathの組み合わせです。同じ<code>/tasks</code>でも、GETなら一覧取得、
+        POSTなら新規作成という別の処理になります。
+      </p>
+      <p>
+        <code>MapGet</code>や<code>MapPost</code>を呼んだ瞬間にGETやPOSTの処理が実行されるわけではありません。
+        アプリケーション起動時に「このmethodとpathのリクエストが来たら、このラムダを実行する」という対応表を登録します。
+        実際のラムダ実行は、<code>app.Run()</code>の後にクライアントからリクエストが届いた時です。
+      </p>
+      <pre><code>起動時に登録する対応表
+
+GET  /tasks  → tasksを一覧として返すラムダ
+POST /tasks  → requestからTaskItemを作るラムダ</code></pre>
+      <p>
+        この対応表の一行をendpointと呼びます。endpointには、HTTP method、route、
+        実行する処理、最終的に返すレスポンスが含まれます。
+      </p>
+    </section>
+
+    <section aria-labelledby="comparison">
+      <h2 id="comparison">Spring Bootとの違い</h2>
+      <p>
+        Spring MVCでは通常、<code>@RestController</code>のメソッドへrouteを割り当てます。
+        Minimal APIでは、<code>Program.cs</code>上でHTTP methodとrouteへ処理を直接割り当てます。
+        小さなAPIでは、起動設定からendpointまでを短いコードで追えます。
+      </p>
+      <p>
+        Spring MVCではcomponent scanがcontrollerを見つけ、annotationから対応表を構築します。
+        Minimal APIでは同じ対応関係を<code>MapGet</code>や<code>MapPost</code>のメソッド呼び出しとして明示します。
+        HTTPリクエストを受けるという役割は同じで、登録方法とコードの配置が異なります。
+      </p>
+      <table>
+        <thead><tr><th>Spring Boot</th><th>Minimal API</th></tr></thead>
+        <tbody>
+          <tr><td><code>@GetMapping("/tasks")</code></td><td><code>app.MapGet("/tasks", ...)</code></td></tr>
+          <tr><td><code>@PostMapping("/tasks")</code></td><td><code>app.MapPost("/tasks", ...)</code></td></tr>
+          <tr><td><code>ResponseEntity.created(...)</code></td><td><code>Results.Created(...)</code></td></tr>
+        </tbody>
+      </table>
+      <figure aria-labelledby="request-caption">
+        <div class="diagram-root">
+          <div class="diagram-title">HTTPリクエストからレスポンスまで</div>
+          <div class="diagram-flow">
+            <div class="diagram-node">curl<br>GET /tasks</div>
+            <div class="diagram-node">route照合<br>MapGet</div>
+            <div class="diagram-node">ラムダを実行<br>tasksを取得</div>
+            <div class="diagram-node">HTTP 200<br>JSON配列</div>
+          </div>
+        </div>
+        <figcaption id="request-caption">
+          <code>MapGet</code>はmethodとpathが一致するリクエストに処理を割り当てる。
+        </figcaption>
+      </figure>
+    </section>
+
+    <section aria-labelledby="startup">
+      <h2 id="startup">起動コードを上から読む</h2>
+      <pre><code>var builder = WebApplication.CreateBuilder(args);
+var app = builder.Build();</code></pre>
+      <p>
+        <code>WebApplication.CreateBuilder(args)</code>は、ASP.NET Coreアプリケーションの準備を始めます。
+        前フェーズのGeneric Hostと同じく、設定、ログ、DI、起動・停止管理を準備し、
+        さらにWebサーバーのKestrelやHTTP処理に必要な機能も組み込みます。
+      </p>
+      <p>
+        <code>builder.Build()</code>は、準備した設定から実行可能な<code>WebApplication</code>を構築します。
+        変数<code>app</code>は、endpointを登録する対象であると同時に、最後に起動するアプリケーション本体です。
+      </p>
+      <pre><code>app.MapGet(...);
+app.MapPost(...);
+app.Run();</code></pre>
+      <p>
+        <code>MapGet</code>と<code>MapPost</code>で先にendpointを登録し、最後の<code>Run</code>でWebサーバーを起動します。
+        <code>Run</code>後はリクエストを待ち続けるため、通常はその後にendpoint登録コードを書きません。
+      </p>
+    </section>
+
+    <section aria-labelledby="files">
+      <h2 id="files">変更対象ファイル</h2>
+      <table>
+        <thead><tr><th>パス</th><th>変更内容</th></tr></thead>
+        <tbody>
+          <tr><td><code>03-aspnet-core/MinimalApiSample/MinimalApiSample.csproj</code></td><td>ASP.NET Core Webプロジェクトとして新規作成</td></tr>
+          <tr><td><code>03-aspnet-core/MinimalApiSample/Program.cs</code></td><td>GET / POST endpointとデータ型を実装</td></tr>
+          <tr><td><code>03-aspnet-core/MinimalApiSample/MinimalApiSample.http</code></td><td>GET / POSTの手動確認リクエストを作成</td></tr>
+          <tr><td><code>03-aspnet-core/MinimalApiSample/Properties/launchSettings.json</code></td><td>開発時URLを<code>http://localhost:5164</code>へ固定</td></tr>
+          <tr><td><code>03-aspnet-core/MinimalApiSample/appsettings.json</code></td><td>テンプレート標準のログ設定を新規作成</td></tr>
+          <tr><td><code>03-aspnet-core/MinimalApiSample/appsettings.Development.json</code></td><td>開発環境用ログ設定を新規作成</td></tr>
+          <tr><td><code>03-aspnet-core/flake.lock</code></td><td>フェーズ3のNix依存バージョンを固定</td></tr>
+          <tr><td><code>03-aspnet-core/docs/task.css</code></td><td>フェーズ3教材用の共通styleを新規作成</td></tr>
+          <tr><td><code>03-aspnet-core/docs/01-minimal-api-get-post.html</code></td><td>今回の実装と読解課題を新規作成</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="code">
+      <h2 id="code">実装したコード</h2>
+      <h3><code>03-aspnet-core/MinimalApiSample/Program.cs</code></h3>
+      <pre><code>var builder = WebApplication.CreateBuilder(args);
+var app = builder.Build();
+
+var tasks = new List&lt;TaskItem&gt;
+{
+    new(1, "Minimal APIのコードを読む", false)
+};
+
+app.MapGet("/tasks", () =&gt; Results.Ok(tasks));
+
+app.MapPost("/tasks", (CreateTaskRequest request) =&gt;
+{
+    var task = new TaskItem(tasks.Count + 1, request.Title, false);
+    tasks.Add(task);
+
+    return Results.Created($"/tasks/{task.Id}", task);
+});
+
+app.Run();
+
+record TaskItem(int Id, string Title, bool IsCompleted);
+record CreateTaskRequest(string Title);</code></pre>
+      <h3>データを保存する変数</h3>
+      <pre><code>var tasks = new List&lt;TaskItem&gt;
+{
+    new(1, "Minimal APIのコードを読む", false)
+};</code></pre>
+      <p>
+        <code>tasks</code>は、アプリケーションのメモリ上に存在する変更可能なlistです。
+        最初からID 1のtaskを一件持っています。GETとPOSTのラムダは、外側で宣言された同じ
+        <code>tasks</code>変数を参照します。このようにラムダが外側のlocal variableを利用することをclosureと呼びます。
+      </p>
+      <p>
+        <code>new(1, ..., false)</code>はtarget-typed <code>new</code>です。
+        左側の<code>List&lt;TaskItem&gt;</code>から型を判断できるため、<code>new TaskItem(...)</code>の型名を省略しています。
+      </p>
+
+      <h3>GET /tasksを読む</h3>
+      <pre><code>app.MapGet("/tasks", () =&gt; Results.Ok(tasks));</code></pre>
+      <p>
+        第1引数<code>"/tasks"</code>はrouteです。第2引数の<code>() =&gt;</code>は引数を受け取らないラムダです。
+        GETリクエストが届くと、このラムダが現在の<code>tasks</code>を<code>Results.Ok</code>へ渡します。
+      </p>
+      <p>
+        <code>Results.Ok(tasks)</code>はHTTP statusを200 OKにし、<code>tasks</code>をresponse bodyにします。
+        ASP.NET Coreが<code>List&lt;TaskItem&gt;</code>をJSON配列へserializeするため、
+        endpoint内でJSON文字列を手作業で組み立てる必要はありません。
+      </p>
+      <pre><code>List&lt;TaskItem&gt;
+    ↓ ASP.NET Coreがserialize
+[{"id":1,"title":"...","isCompleted":false}]</code></pre>
+
+      <h3>POST /tasksを読む</h3>
+      <pre><code>app.MapPost("/tasks", (CreateTaskRequest request) =&gt;
+{
+    var task = new TaskItem(tasks.Count + 1, request.Title, false);
+    tasks.Add(task);
+
+    return Results.Created($"/tasks/{task.Id}", task);
+});</code></pre>
+      <p>
+        POSTではクライアントが<code>Content-Type: application/json</code>のbodyを送ります。
+        ASP.NET CoreはJSONの<code>title</code>を<code>CreateTaskRequest.Title</code>へ対応付け、
+        作成した<code>CreateTaskRequest</code>をラムダの<code>request</code>引数へ渡します。
+        この変換をモデルbindingと呼びます。今回は自動変換が起きる場所だけ確認し、詳細は次の課題で扱います。
+      </p>
+      <p>
+        ラムダ内では、現在の件数に1を足してIDを作り、requestのtitleと未完了を示す
+        <code>false</code>から<code>TaskItem</code>を生成します。<code>tasks.Add(task)</code>が共有listを変更するため、
+        同じアプリケーションプロセスへ次のGETを送ると、新しいtaskも返されます。
+      </p>
+      <p>
+        <code>Results.Ok</code>は200 OK、<code>Results.Created</code>は201 Createdを返します。
+        Createdの第1引数は作成したresourceの場所を示す<code>Location</code>ヘッダー、
+        第2引数はJSON response bodyです。
+      </p>
+      <p>
+        201は「リクエストを処理できた」だけでなく「新しいresourceを作成した」ことを表します。
+        <code>Location: /tasks/2</code>は作成されたresourceの場所をクライアントへ知らせます。
+        今回はまだ<code>GET /tasks/{id}</code>を実装していませんが、Locationには将来そのresourceを取得するURIを示しています。
+      </p>
+
+      <h3>二つのrecordの役割</h3>
+      <pre><code>record TaskItem(int Id, string Title, bool IsCompleted);
+record CreateTaskRequest(string Title);</code></pre>
+      <p>
+        <code>CreateTaskRequest</code>はクライアントから受け取る入力の形です。新規作成時のIDと完了状態は
+        サーバー側で決めるため、requestには含めません。<code>TaskItem</code>はサーバーが保持し、responseとして返すresourceの形です。
+        入力用と出力・保持用の型を分けることで、クライアントが勝手にIDや初期状態を指定する設計を避けています。
+      </p>
+    </section>
+
+    <section aria-labelledby="memory">
+      <h2 id="memory">今回のデータが残る範囲</h2>
+      <p>
+        <code>tasks</code>はデータベースではなくプロセスのメモリにあります。そのため、同じ起動中のGETとPOSTでは共有されますが、
+        アプリケーションを停止して再起動すると初期の一件へ戻ります。今回の目的はHTTPとendpointの流れを読むことであり、
+        永続化は後のEF Coreフェーズで追加します。
+      </p>
+      <pre><code>同じ起動中
+GET（1件）→ POST（listへ追加）→ GET（2件）
+
+再起動後
+Program.csを最初から実行 → 初期データの1件へ戻る</code></pre>
+      <p>
+        また、<code>tasks.Count + 1</code>によるID生成や通常の<code>List&lt;T&gt;</code>は、同時に多数のPOSTを処理する実運用向けではありません。
+        今回はMinimal APIの最小構造を読むための一時的な実装です。
+      </p>
+    </section>
+
+    <section aria-labelledby="verification">
+      <h2 id="verification">確認コマンド</h2>
+      <p>
+        最初の3コマンドは、ソースの整形、コンパイル、Webサーバー起動を順番に確認します。
+        <code>dotnet run</code>はリクエスト待受中そのまま動き続けるため、curlは別のterminalから実行します。
+      </p>
+      <pre><code>cd 03-aspnet-core
+dotnet format MinimalApiSample/MinimalApiSample.csproj --verify-no-changes
+dotnet build MinimalApiSample/MinimalApiSample.csproj
+dotnet run --no-build --project MinimalApiSample/MinimalApiSample.csproj</code></pre>
+      <p>別のfishセッションから次を実行します。</p>
+      <pre><code>curl -i http://localhost:5164/tasks
+
+curl -i -X POST http://localhost:5164/tasks \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"POSTエンドポイントを確認する"}'
+
+curl -i http://localhost:5164/tasks</code></pre>
+      <p>
+        <code>curl -i</code>の<code>-i</code>はresponse headerも表示するoptionです。
+        POSTでは<code>-H</code>でbodyがJSONであることを伝え、<code>-d</code>でJSON bodyを送ります。
+        statusだけでなく<code>Content-Type</code>と<code>Location</code>も確認します。
+      </p>
+      <h3>観察結果</h3>
+      <pre><code># 最初のGET
+HTTP/1.1 200 OK
+[{"id":1,"title":"Minimal APIのコードを読む","isCompleted":false}]
+
+# POST
+HTTP/1.1 201 Created
+Location: /tasks/2
+{"id":2,"title":"POSTエンドポイントを確認する","isCompleted":false}
+
+# POST後のGET
+HTTP/1.1 200 OK
+[{"id":1,...},{"id":2,...}]</code></pre>
+      <p>
+        POSTで作成したtaskが同じプロセス内のlistへ追加され、続くGETでは2件になりました。
+        フォーマット検証とビルドも成功し、警告・エラーは0件でした。
+      </p>
+    </section>
+
+    <section aria-labelledby="review">
+      <h2 id="review">コードリーディング課題</h2>
+      <ol>
+        <li>POSTが成功したとき、なぜ200ではなく201を返し、<code>Location</code>ヘッダーを付けるのでしょうか。</li>
+        <li>POST後のGETで要素が増えるのは、どの変数を二つのendpointが共有しているためですか。</li>
+      </ol>
+      <p>GETとPOSTの実測結果を確認し、上の2問を説明できれば完了です。</p>
+    </section>
+  </main>
+</body>
+</html>

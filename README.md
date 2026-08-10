@@ -187,7 +187,7 @@ dotnet format TypeSystemSamples/TypeSystemSamples.csproj
 
 ### 3. ASP.NET Core
 
-- [ ] Minimal API で GET / POST エンドポイントを作る。
+- [x] Minimal API で GET / POST エンドポイントを作る。
 - [ ] Controller ベースの API を読み、Minimal API との使い分けを説明できる。
 - [ ] route / query / body のモデルバインディングを実装する。
 - [ ] 入力検証と適切な HTTP ステータスコードを実装する。

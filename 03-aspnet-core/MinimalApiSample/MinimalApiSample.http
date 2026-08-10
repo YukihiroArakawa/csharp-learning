@@ -1,0 +1,18 @@
+@host = http://localhost:5164
+
+GET {{host}}/tasks
+Accept: application/json
+
+###
+
+POST {{host}}/tasks
+Content-Type: application/json
+
+{
+  "title": "POSTエンドポイントを確認する"
+}
+
+###
+
+GET {{host}}/tasks
+Accept: application/json
