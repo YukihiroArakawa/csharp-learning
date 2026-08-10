@@ -1,0 +1,4 @@
+interface:
+  display_name: "C# Learning Coach"
+  short_description: "AI実装の差分読解を中心にしたC#学習・レビュー支援"
+  default_prompt: "Use $csharp-learning-coach to implement my next C# learning change and guide me through reviewing it."
