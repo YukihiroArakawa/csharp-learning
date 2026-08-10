@@ -2,10 +2,16 @@ namespace HostedWorker;
 
 public class Worker(
     ILogger<Worker> logger,
+    IConfiguration configuration,
     IServiceScopeFactory scopeFactory) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var message = configuration["Worker:Message"]
+            ?? throw new InvalidOperationException("Worker:Message is not configured.");
+
+        logger.LogInformation("Configured message: {Message}", message);
+
         for (var scopeNumber = 1; scopeNumber <= 2; scopeNumber++)
         {
             using var scope = scopeFactory.CreateScope();

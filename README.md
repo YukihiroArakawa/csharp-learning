@@ -180,7 +180,7 @@ dotnet format TypeSystemSamples/TypeSystemSamples.csproj
 - [x] Generic Host を用いた `BackgroundService` を一つ実装する。
 - [x] DI に singleton / scoped / transient を登録し、各 lifetime を説明できる。
 - [x] scoped service を singleton に注入できない理由を確認する。
-- [ ] `appsettings.json` と環境変数から設定を読み込む。
+- [x] `appsettings.json` と環境変数から設定を読み込む。
 - [ ] Options パターンで設定を型安全に受け取る。
 - [ ] `ILogger<T>` で構造化ログを出力する。
 - [ ] ホスト停止時に `CancellationToken` を使って処理を終了させる。
