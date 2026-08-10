@@ -26,20 +26,37 @@ public class Worker(
             LogLifetimeIds(scope.ServiceProvider, scopeNumber);
         }
 
+        await RunHeartbeatAsync(settings.DelayMilliseconds, stoppingToken);
+    }
+
+    private async Task RunHeartbeatAsync(
+        int delayMilliseconds,
+        CancellationToken cancellationToken)
+    {
         var iteration = 0;
 
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            iteration++;
-
-            if (logger.IsEnabled(LogLevel.Information))
+            while (!cancellationToken.IsCancellationRequested)
             {
-                logger.LogInformation(
-                    "Worker heartbeat {Iteration} at {OccurredAt}",
-                    iteration,
-                    DateTimeOffset.Now);
+                iteration++;
+
+                if (logger.IsEnabled(LogLevel.Information))
+                {
+                    logger.LogInformation(
+                        "Worker heartbeat {Iteration} at {OccurredAt}",
+                        iteration,
+                        DateTimeOffset.Now);
+                }
+
+                await Task.Delay(delayMilliseconds, cancellationToken);
             }
-            await Task.Delay(settings.DelayMilliseconds, stoppingToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            logger.LogInformation(
+                "Worker stopped after {IterationCount} heartbeat(s)",
+                iteration);
         }
     }
 

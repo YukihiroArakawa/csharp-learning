@@ -183,7 +183,7 @@ dotnet format TypeSystemSamples/TypeSystemSamples.csproj
 - [x] `appsettings.json` と環境変数から設定を読み込む。
 - [x] Options パターンで設定を型安全に受け取る。
 - [x] `ILogger<T>` で構造化ログを出力する。
-- [ ] ホスト停止時に `CancellationToken` を使って処理を終了させる。
+- [x] ホスト停止時に `CancellationToken` を使って処理を終了させる。
 
 ### 3. ASP.NET Core
 
