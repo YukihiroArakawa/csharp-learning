@@ -1,16 +1,20 @@
+using Microsoft.Extensions.Options;
+
 namespace HostedWorker;
 
 public class Worker(
     ILogger<Worker> logger,
-    IConfiguration configuration,
+    IOptions<WorkerOptions> options,
     IServiceScopeFactory scopeFactory) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var message = configuration["Worker:Message"]
-            ?? throw new InvalidOperationException("Worker:Message is not configured.");
+        var settings = options.Value;
 
-        logger.LogInformation("Configured message: {Message}", message);
+        logger.LogInformation(
+            "Configured message: {Message}; delay: {DelayMilliseconds} ms",
+            settings.Message,
+            settings.DelayMilliseconds);
 
         for (var scopeNumber = 1; scopeNumber <= 2; scopeNumber++)
         {
@@ -24,7 +28,7 @@ public class Worker(
             {
                 logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
             }
-            await Task.Delay(1000, stoppingToken);
+            await Task.Delay(settings.DelayMilliseconds, stoppingToken);
         }
     }
 

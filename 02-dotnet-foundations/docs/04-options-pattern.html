@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Optionsパターンで設定を型安全に読む</title>
+  <link rel="stylesheet" href="task.css">
+</head>
+<body>
+  <main>
+    <h1>Optionsパターンで設定を型安全に読む</h1>
+
+    <section aria-labelledby="overview">
+      <h2 id="overview">今回の課題</h2>
+      <ul>
+        <li>目安時間：25分</li>
+        <li>前提：<code>IConfiguration</code>が複数の設定元を統合することを説明できる</li>
+        <li>目的：文字列キーによる設定アクセスをC#の型へまとめ、起動時に検証する</li>
+      </ul>
+      <p>
+        CodexがOptionsパターンを実装します。学習者は、設定値がJSONから
+        <code>WorkerOptions</code>へ変換され、DIを通じてWorkerへ届く経路を読みます。
+      </p>
+    </section>
+
+    <section aria-labelledby="why">
+      <h2 id="why">なぜ型へまとめるのか</h2>
+      <p>
+        <code>configuration["Worker:DelayMilliseconds"]</code> のようなアクセスは
+        戻り値が文字列で、キーのタイプミスもコンパイルでは検出できません。
+        Optionsパターンでは、設定を専用クラスへ変換します。利用側は
+        <code>int</code>として受け取れるため、変換処理や文字列キーを繰り返しません。
+      </p>
+      <p>
+        Spring Bootの <code>@ConfigurationProperties(prefix = "worker")</code> を付けた
+        設定クラスに近い仕組みです。
+      </p>
+      <figure aria-labelledby="flow-caption">
+        <div class="diagram-root">
+          <div class="diagram-title">設定がWorkerへ届く経路</div>
+          <div class="diagram-scopes">
+            <section class="diagram-scope"><h3>設定元</h3><div>JSON・環境変数</div></section>
+            <section class="diagram-scope"><h3>統合</h3><div>IConfiguration</div></section>
+            <section class="diagram-scope"><h3>変換・検証</h3><div>WorkerOptions</div></section>
+            <section class="diagram-scope"><h3>利用</h3><div>IOptions&lt;WorkerOptions&gt; → Worker</div></section>
+          </div>
+        </div>
+        <figcaption id="flow-caption">
+          Workerは設定元や文字列キーを知らず、型付けされた値だけを利用する。
+        </figcaption>
+      </figure>
+    </section>
+
+    <section aria-labelledby="files">
+      <h2 id="files">変更対象ファイル</h2>
+      <table>
+        <thead><tr><th>パス</th><th>変更内容</th></tr></thead>
+        <tbody>
+          <tr><td><code>02-dotnet-foundations/HostedWorker/WorkerOptions.cs</code></td><td>設定を受け取る専用型を新規作成</td></tr>
+          <tr><td><code>02-dotnet-foundations/HostedWorker/Program.cs</code></td><td>設定セクションのbindingと起動時validationを登録</td></tr>
+          <tr><td><code>02-dotnet-foundations/HostedWorker/Worker.cs</code></td><td><code>IConfiguration</code>を<code>IOptions&lt;WorkerOptions&gt;</code>へ変更</td></tr>
+          <tr><td><code>02-dotnet-foundations/HostedWorker/appsettings.json</code></td><td>整数設定<code>DelayMilliseconds</code>を追加</td></tr>
+          <tr><td><code>02-dotnet-foundations/docs/04-options-pattern.html</code></td><td>実装、検証結果、読解課題を記録</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="code">
+      <h2 id="code">実装したコード</h2>
+      <h3><code>02-dotnet-foundations/HostedWorker/WorkerOptions.cs</code></h3>
+      <pre><code>public sealed class WorkerOptions
+{
+    public const string SectionName = "Worker";
+
+    public string Message { get; init; } = string.Empty;
+
+    public int DelayMilliseconds { get; init; }
+}</code></pre>
+      <p>
+        <code>const</code>はコンパイル時に決まる定数です。
+        <code>SectionName</code>へセクション名を一か所に集約します。
+        <code>init</code>は初期化時だけ値を設定でき、以後の不用意な変更を防ぎます。
+        Javaの設定用POJOまたはrecordに近い役割ですが、.NETの設定binderが
+        public propertyへ値を設定できる形にします。
+      </p>
+
+      <h3><code>02-dotnet-foundations/HostedWorker/Program.cs</code></h3>
+      <pre><code>builder.Services
+    .AddOptions&lt;WorkerOptions&gt;()
+    .Bind(builder.Configuration.GetSection(WorkerOptions.SectionName))
+    .Validate(options =&gt; !string.IsNullOrWhiteSpace(options.Message),
+        "Worker:Message must not be empty.")
+    .Validate(options =&gt; options.DelayMilliseconds is &gt;= 100 and &lt;= 60_000,
+        "Worker:DelayMilliseconds must be between 100 and 60000.")
+    .ValidateOnStart();</code></pre>
+      <ul>
+        <li><code>AddOptions&lt;WorkerOptions&gt;()</code>：この設定型をDIへ登録する</li>
+        <li><code>Bind(...)</code>：<code>Worker</code>セクションをpropertyへ対応付ける</li>
+        <li><code>Validate(...)</code>：値が業務上許される範囲か検証する</li>
+        <li><code>ValidateOnStart()</code>：設定ミスを実処理の途中ではなく起動時に検出する</li>
+      </ul>
+      <p>
+        <code>options =&gt; ...</code> はラムダ式で、Javaの <code>options -&gt; ...</code> に対応します。
+        <code>is &gt;= 100 and &lt;= 60_000</code> は値が範囲内か調べるrelational patternです。
+        数字中のアンダースコアは読みやすさのためで、値は60000です。
+      </p>
+
+      <h3><code>02-dotnet-foundations/HostedWorker/Worker.cs</code></h3>
+      <pre><code>using Microsoft.Extensions.Options;
+
+IOptions&lt;WorkerOptions&gt; options
+
+var settings = options.Value;
+
+await Task.Delay(settings.DelayMilliseconds, stoppingToken);</code></pre>
+      <p>
+        ジェネリック型 <code>IOptions&lt;WorkerOptions&gt;</code> をDIで受け取り、
+        <code>Value</code>から型付けされた設定を取得します。
+        <code>DelayMilliseconds</code>は既に<code>int</code>なので、Worker内で文字列から変換しません。
+      </p>
+    </section>
+
+    <section aria-labelledby="verification">
+      <h2 id="verification">確認コマンド</h2>
+      <pre><code>cd 02-dotnet-foundations
+dotnet format HostedWorker/HostedWorker.csproj --verify-no-changes
+dotnet build HostedWorker/HostedWorker.csproj
+timeout 3s dotnet run --no-build --project HostedWorker/HostedWorker.csproj
+
+env Worker__DelayMilliseconds=50 \
+  dotnet run --no-build --project HostedWorker/HostedWorker.csproj</code></pre>
+      <p>
+        通常起動ではメッセージと<code>1000 ms</code>がログに出ます。
+        二つ目は許容範囲外のため、Workerの反復処理へ入る前にOptions validationで起動が失敗する想定です。
+      </p>
+      <h3>観察結果</h3>
+      <pre><code># 通常設定（終了コード124はtimeoutによる停止）
+Configured message: appsettings.jsonからのメッセージ; delay: 1000 ms
+
+# Worker__DelayMilliseconds=50（終了コード134）
+Microsoft.Extensions.Options.OptionsValidationException:
+Worker:DelayMilliseconds must be between 100 and 60000.</code></pre>
+      <p>
+        通常設定ではHostが起動しました。不正値では
+        <code>Worker running at</code>が一度も出る前にHost起動が失敗しました。
+      </p>
+    </section>
+
+    <section aria-labelledby="review">
+      <h2 id="review">コードリーディング課題</h2>
+      <ol>
+        <li><code>WorkerOptions.DelayMilliseconds</code>が<code>int</code>であることにより、Worker側で不要になった処理は何ですか。</li>
+        <li><code>ValidateOnStart()</code>を付けると、設定ミスをいつ検出できますか。</li>
+      </ol>
+      <p>正常時と不正値の挙動を確認し、上の2問を説明できれば完了です。</p>
+    </section>
+  </main>
+</body>
+</html>
