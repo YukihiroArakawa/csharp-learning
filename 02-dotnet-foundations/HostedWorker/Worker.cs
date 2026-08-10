@@ -10,6 +10,10 @@ public class Worker(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var settings = options.Value;
+        var workerRunId = Guid.NewGuid();
+        using var logScope = logger.BeginScope(
+            "Worker run {WorkerRunId}",
+            workerRunId);
 
         logger.LogInformation(
             "Configured message: {Message}; delay: {DelayMilliseconds} ms",
@@ -22,11 +26,18 @@ public class Worker(
             LogLifetimeIds(scope.ServiceProvider, scopeNumber);
         }
 
+        var iteration = 0;
+
         while (!stoppingToken.IsCancellationRequested)
         {
+            iteration++;
+
             if (logger.IsEnabled(LogLevel.Information))
             {
-                logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
+                logger.LogInformation(
+                    "Worker heartbeat {Iteration} at {OccurredAt}",
+                    iteration,
+                    DateTimeOffset.Now);
             }
             await Task.Delay(settings.DelayMilliseconds, stoppingToken);
         }
