@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>singletonからscopedを直接参照できない理由</title>
+  <link rel="stylesheet" href="task.css">
+</head>
+<body>
+  <main>
+    <h1>singletonからscopedを直接参照できない理由</h1>
+
+    <section aria-labelledby="overview">
+      <h2 id="overview">この学習項目について</h2>
+      <ul>
+        <li>目安時間：15分</li>
+        <li>対象：<code>02-dotnet-foundations/HostedWorker</code></li>
+        <li>種類：一時的なエラー再現＋コードレビュー</li>
+      </ul>
+      <p>
+        長く生存するsingletonが、短いスコープで破棄されるべきscoped serviceを保持すると、
+        scoped serviceをいつ破棄すべきか決められません。このlifetimeの不整合を
+        <strong>captive dependency</strong> と呼びます。
+      </p>
+    </section>
+
+    <section aria-labelledby="lifetimes">
+      <h2 id="lifetimes">寿命の不整合</h2>
+      <p>
+        <code>AddHostedService&lt;Worker&gt;()</code> で登録されたWorkerはsingletonです。
+        アプリケーション起動時に一度作られ、停止まで生存します。一方、
+        <code>ScopedId</code> は一つのスコープが終わると破棄されるべきサービスです。
+      </p>
+
+      <figure class="lifetime-diagram" aria-labelledby="captive-caption">
+        <div class="diagram-root">
+          <div class="diagram-title">アプリケーション全体</div>
+          <div class="diagram-singleton">Worker（singleton）：起動から停止まで</div>
+          <div class="diagram-scopes">
+            <section class="diagram-scope" aria-label="処理スコープ1">
+              <h3>処理スコープ1</h3>
+              <div>ScopedId：スコープ終了時に破棄</div>
+            </section>
+            <section class="diagram-scope" aria-label="処理スコープ2">
+              <h3>処理スコープ2</h3>
+              <div>ScopedId：別のインスタンス</div>
+            </section>
+          </div>
+        </div>
+        <figcaption id="captive-caption">
+          WorkerがScopedIdを直接保持すると、ScopedIdをどちらのスコープへ所属させるべきか決められない。
+        </figcaption>
+      </figure>
+    </section>
+
+    <section aria-labelledby="experiment">
+      <h2 id="experiment">観察したエラー</h2>
+      <p>
+        Codexが検証のため、Workerのprimary constructorへ
+        <code>ScopedId scopedId</code> を一時的に追加しました。
+      </p>
+      <pre><code>public class Worker(
+    ILogger&lt;Worker&gt; logger,
+    IServiceScopeFactory scopeFactory,
+    ScopedId scopedId) : BackgroundService</code></pre>
+      <p>
+        Development環境でHostを起動すると、DIコンテナはサービスを構築する前に
+        lifetimeの不整合を検出しました。
+      </p>
+      <pre><code>Cannot consume scoped service 'HostedWorker.ScopedId'
+from singleton 'Microsoft.Extensions.Hosting.IHostedService'.</code></pre>
+      <p>
+        エラーは <code>Worker.ExecuteAsync</code> の実行中ではなく、
+        <code>builder.Build()</code> でDIコンテナを構築するときに発生しました。
+        不正な依存関係を処理開始前に検出するためです。
+      </p>
+    </section>
+
+    <section aria-labelledby="correct-pattern">
+      <h2 id="correct-pattern">正常な設計</h2>
+      <p>
+        singletonのWorkerには、scoped serviceそのものではなく
+        <code>IServiceScopeFactory</code> を注入します。処理単位でスコープを作り、
+        そのスコープの <code>ServiceProvider</code> からscoped serviceを取得します。
+      </p>
+      <pre><code>using var scope = scopeFactory.CreateScope();
+
+var scopedId = scope.ServiceProvider
+    .GetRequiredService&lt;ScopedId&gt;();</code></pre>
+      <p>
+        <code>using</code> の範囲を抜けるとスコープが破棄され、スコープ内で生成された
+        disposableなサービスもまとめて破棄されます。Springでsingleton beanから
+        request-scoped beanを直接保持せず、スコープを意識したproxyやproviderを介する考え方に近いものです。
+      </p>
+    </section>
+
+    <section aria-labelledby="files">
+      <h2 id="files">変更対象</h2>
+      <p>
+        正常なC#コードへの永続的な変更はありません。一時的に
+        <code>02-dotnet-foundations/HostedWorker/Worker.cs</code> を変更してエラーを観察し、
+        観察後に元の正常な実装へ戻しました。
+      </p>
+      <p>
+        学習記録として、この
+        <code>02-dotnet-foundations/docs/02-scoped-in-singleton.html</code>
+        だけを新規作成します。
+      </p>
+    </section>
+
+    <section aria-labelledby="verification">
+      <h2 id="verification">検証結果</h2>
+      <ul>
+        <li>直接注入時：Host構築に失敗し、期待したlifetime検証エラーを確認</li>
+        <li>正常実装へ復元後：ソース差分が教材追加だけであることを確認</li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="review">
+      <h2 id="review">レビュー課題と完了条件</h2>
+      <p>次の問いに答えてください。</p>
+      <ol>
+        <li>DIコンテナが直接注入を許可した場合、<code>ScopedId</code>は実質的にどのlifetimeのように振る舞うでしょうか。</li>
+        <li><code>IServiceScopeFactory</code> を注入する方法では、scoped serviceをいつ破棄できるようになりますか。</li>
+      </ol>
+      <ul class="checklist">
+        <li>✓ lifetime不整合のエラーを再現済み</li>
+        <li>✓ 正常なWorkerへ復元済み</li>
+        <li>□ 上の2問を説明できる</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
