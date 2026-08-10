@@ -1,0 +1,165 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  line-height: 1.75;
+}
+
+body {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 5rem;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  line-height: 1.3;
+  margin-top: 2em;
+}
+
+h1 {
+  border-bottom: 3px solid #4f7cac;
+  padding-bottom: 0.4em;
+}
+
+h2 {
+  border-bottom: 1px solid #8a8f98;
+  padding-bottom: 0.25em;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+:not(pre) > code {
+  background: color-mix(in srgb, CanvasText 10%, Canvas);
+  border-radius: 0.25rem;
+  padding: 0.1em 0.35em;
+}
+
+pre {
+  background: #17202a;
+  color: #f4f6f7;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  padding: 1rem;
+}
+
+/* Pandoc's default dark blue for function names is hard to read here. */
+pre code span.fu {
+  color: #ffd166;
+  font-weight: 600;
+}
+
+table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+  width: max-content;
+  max-width: 100%;
+}
+
+th,
+td {
+  border: 1px solid #8a8f98;
+  padding: 0.55rem 0.8rem;
+  text-align: left;
+}
+
+th {
+  background: color-mix(in srgb, #4f7cac 18%, Canvas);
+}
+
+li {
+  margin-block: 0.35rem;
+}
+
+.column {
+  background: color-mix(in srgb, #4f7cac 10%, Canvas);
+  border: 1px solid color-mix(in srgb, #4f7cac 55%, Canvas);
+  border-left: 0.4rem solid #4f7cac;
+  border-radius: 0.5rem;
+  margin-block: 2.5rem;
+  padding: 0.25rem 1.25rem 1.25rem;
+}
+
+.column h3 {
+  margin-top: 0.25rem;
+}
+
+.column-label {
+  color: #4f7cac;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin-bottom: 0;
+  text-transform: uppercase;
+}
+
+@media (prefers-color-scheme: dark) {
+  .column-label {
+    color: #9cc9f5;
+  }
+}
+
+.lifetime-diagram {
+  margin: 2rem 0;
+}
+
+.diagram-root {
+  background: color-mix(in srgb, #4f7cac 8%, Canvas);
+  border: 2px solid #4f7cac;
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.diagram-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.diagram-singleton {
+  background: color-mix(in srgb, #ffd166 25%, Canvas);
+  border: 2px solid #c89400;
+  border-radius: 0.5rem;
+  font-weight: 700;
+  margin: 1rem auto;
+  max-width: 28rem;
+  padding: 0.65rem;
+  text-align: center;
+}
+
+.diagram-scopes {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+
+.diagram-scope {
+  border: 1px solid #8a8f98;
+  border-radius: 0.5rem;
+  padding: 0 1rem 1rem;
+}
+
+.diagram-scope h3 {
+  margin-top: 1rem;
+}
+
+.diagram-scope div {
+  background: color-mix(in srgb, #4f7cac 12%, Canvas);
+  border-radius: 0.35rem;
+  margin-top: 0.6rem;
+  padding: 0.55rem;
+}
+
+figcaption {
+  color: color-mix(in srgb, CanvasText 75%, Canvas);
+  font-size: 0.9rem;
+  margin-top: 0.6rem;
+}
+
+.checklist {
+  list-style: "□  ";
+}
