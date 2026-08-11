@@ -31,13 +31,40 @@ app.MapGet("/tasks/{id:int}", (int id) =>
 
 app.MapPost("/tasks", (CreateTaskRequest request) =>
 {
-    var task = new TaskItem(tasks.Count + 1, request.Title, false);
-    tasks.Add(task);
+    var errors = Validate(request);
+    IResult result;
 
-    return Results.Created($"/tasks/{task.Id}", task);
+    if (errors.Count > 0)
+    {
+        result = Results.ValidationProblem(errors);
+    }
+    else
+    {
+        var task = new TaskItem(tasks.Count + 1, request.Title, false);
+        tasks.Add(task);
+        result = Results.Created($"/tasks/{task.Id}", task);
+    }
+
+    return result;
 });
 
 app.Run();
+
+static Dictionary<string, string[]> Validate(CreateTaskRequest request)
+{
+    var errors = new Dictionary<string, string[]>();
+
+    if (string.IsNullOrWhiteSpace(request.Title))
+    {
+        errors["title"] = new[] { "Title is required." };
+    }
+    else if (request.Title.Length > 100)
+    {
+        errors["title"] = new[] { "Title must be 100 characters or fewer." };
+    }
+
+    return errors;
+}
 
 record TaskItem(int Id, string Title, bool IsCompleted);
 

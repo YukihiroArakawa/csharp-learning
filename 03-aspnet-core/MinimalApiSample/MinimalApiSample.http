@@ -24,5 +24,14 @@ Content-Type: application/json
 
 ###
 
+POST {{host}}/tasks
+Content-Type: application/json
+
+{
+  "title": "   "
+}
+
+###
+
 GET {{host}}/tasks
 Accept: application/json

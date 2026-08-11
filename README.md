@@ -190,7 +190,7 @@ dotnet format TypeSystemSamples/TypeSystemSamples.csproj
 - [x] Minimal API で GET / POST エンドポイントを作る。
 - [ ] Controller ベースの API を読み、Minimal API との使い分けを説明できる。
 - [x] route / query / body のモデルバインディングを実装する。
-- [ ] 入力検証と適切な HTTP ステータスコードを実装する。
+- [x] 入力検証と適切な HTTP ステータスコードを実装する。
 - [ ] middleware を追加し、登録順による挙動の違いを確認する。
 - [ ] 例外を Problem Details 形式で統一する。
 - [ ] OpenAPI を有効にして API 仕様を確認する。
