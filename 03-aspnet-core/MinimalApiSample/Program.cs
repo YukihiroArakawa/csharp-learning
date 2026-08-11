@@ -1,7 +1,11 @@
 using System.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddProblemDetails();
+
 var app = builder.Build();
+
+app.UseExceptionHandler();
 
 app.Use(async (context, next) =>
 {
@@ -35,6 +39,15 @@ var tasks = new List<TaskItem>
     new(1, "Minimal APIのコードを読む", false),
     new(2, "GETとPOSTを確認する", true)
 };
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapGet("/diagnostics/failure", () =>
+    {
+        throw new InvalidOperationException(
+            "Development-only failure for Problem Details verification.");
+    });
+}
 
 app.MapGet("/tasks", (bool? completed) =>
 {

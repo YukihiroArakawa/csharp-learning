@@ -5,6 +5,11 @@ Accept: application/json
 
 ###
 
+GET {{host}}/diagnostics/failure
+Accept: application/problem+json
+
+###
+
 GET {{host}}/tasks?completed=false
 Accept: application/json
 

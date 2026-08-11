@@ -192,7 +192,7 @@ dotnet format TypeSystemSamples/TypeSystemSamples.csproj
 - [x] route / query / body のモデルバインディングを実装する。
 - [x] 入力検証と適切な HTTP ステータスコードを実装する。
 - [x] middleware を追加し、登録順による挙動の違いを確認する。
-- [ ] 例外を Problem Details 形式で統一する。
+- [x] 例外を Problem Details 形式で統一する。
 - [ ] OpenAPI を有効にして API 仕様を確認する。
 - [ ] 認証と認可の違い、および policy / role の使い分けを説明できる。
 
