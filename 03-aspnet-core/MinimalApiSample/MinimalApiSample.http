@@ -5,11 +5,21 @@ Accept: application/json
 
 ###
 
+GET {{host}}/tasks?completed=false
+Accept: application/json
+
+###
+
+GET {{host}}/tasks/1
+Accept: application/json
+
+###
+
 POST {{host}}/tasks
 Content-Type: application/json
 
 {
-  "title": "POSTエンドポイントを確認する"
+  "title": "モデルbindingを確認する"
 }
 
 ###

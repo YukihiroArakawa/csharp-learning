@@ -3,10 +3,31 @@ var app = builder.Build();
 
 var tasks = new List<TaskItem>
 {
-    new(1, "Minimal APIのコードを読む", false)
+    new(1, "Minimal APIのコードを読む", false),
+    new(2, "GETとPOSTを確認する", true)
 };
 
-app.MapGet("/tasks", () => Results.Ok(tasks));
+app.MapGet("/tasks", (bool? completed) =>
+{
+    IEnumerable<TaskItem> result = tasks;
+
+    if (completed is not null)
+    {
+        result = tasks.Where(task => task.IsCompleted == completed.Value);
+    }
+
+    return Results.Ok(result);
+});
+
+app.MapGet("/tasks/{id:int}", (int id) =>
+{
+    var task = tasks.FirstOrDefault(task => task.Id == id);
+    IResult result = task is null
+        ? Results.NotFound()
+        : Results.Ok(task);
+
+    return result;
+});
 
 app.MapPost("/tasks", (CreateTaskRequest request) =>
 {
