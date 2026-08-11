@@ -1,5 +1,34 @@
+using System.Diagnostics;
+
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
+
+app.Use(async (context, next) =>
+{
+    var startedAt = Stopwatch.GetTimestamp();
+    app.Logger.LogInformation(
+        "Request timing middleware entering for {Method} {Path}",
+        context.Request.Method,
+        context.Request.Path);
+
+    await next(context);
+
+    var elapsed = Stopwatch.GetElapsedTime(startedAt);
+    app.Logger.LogInformation(
+        "Request timing middleware leaving with {StatusCode} after {ElapsedMilliseconds} ms",
+        context.Response.StatusCode,
+        elapsed.TotalMilliseconds);
+});
+
+app.Use(async (context, next) =>
+{
+    app.Logger.LogInformation("Response header middleware entering");
+    context.Response.Headers["X-Task-Api"] = "MinimalApiSample";
+
+    await next(context);
+
+    app.Logger.LogInformation("Response header middleware leaving");
+});
 
 var tasks = new List<TaskItem>
 {
