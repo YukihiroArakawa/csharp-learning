@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GCとIDisposableの責務を区別する</title>
+  <link rel="stylesheet" href="task.css">
+</head>
+<body>
+  <main>
+    <h1>GCとIDisposableの責務を区別する</h1>
+
+    <section aria-labelledby="overview">
+      <h2 id="overview">今回の課題</h2>
+      <ul>
+        <li>目安時間：20〜30分</li>
+        <li>前提：<code>using</code>と<code>IDisposable</code>の基本構文を読める</li>
+        <li>目的：managed memoryの回収と、外部resourceの解放を別の責務として判断できる</li>
+      </ul>
+      <p>
+        この項目ではruntime内部を再現するためのコードは書きません。実務で必要なのはGCのalgorithmを実装することではなく、
+        objectを使い終えたときにGCへ任せてよいのか、<code>Dispose</code>を確実に呼ぶ必要があるのかを判断することだからです。
+        説明を読んだ後、三つの状況についてresourceの終了時点を説明します。
+      </p>
+    </section>
+
+    <section aria-labelledby="two-responsibilities">
+      <h2 id="two-responsibilities">二つの責務を分けて考える</h2>
+      <p>
+        .NETのGC（garbage collector）は、applicationが作ったmanaged objectのうち、到達できなくなったものが使っていた
+        managed heap上のmemoryを再利用可能にします。通常のclass instance、配列、文字列などについて、開発者がmemoryを
+        手動で<code>free</code>する必要がないのはGCがあるためです。
+      </p>
+      <p>
+        しかしapplicationが扱うresourceはmemoryだけではありません。file handle、socket、database connection、OS handleなどは、
+        process外部またはOS側の限られたresourceと結び付いています。C#のwrapper object自体はmanaged objectでも、その背後にある
+        resourceは「objectが不要になったら、いつかGCが気付けばよい」とは限りません。fileを閉じる、connectionをpoolへ返す、
+        bufferをflushするといった終了処理には、明確な実行時点が必要です。
+      </p>
+      <figure aria-labelledby="responsibility-caption">
+        <div class="diagram-root">
+          <div class="diagram-title">同じobjectに見えても、終了時に扱う対象が二つある</div>
+          <div class="diagram-scopes">
+            <section class="diagram-scope">
+              <h3>GCの責務</h3>
+              <div>到達不能なmanaged objectを検出</div>
+              <div>managed heapのmemoryを再利用可能にする</div>
+              <div>実行時点はruntimeが決める</div>
+            </section>
+            <section class="diagram-scope">
+              <h3>Disposeの責務</h3>
+              <div>使い終えたresourceの終了処理を行う</div>
+              <div>file・socket・connectionなどを速やかに解放する</div>
+              <div>実行時点は所有者が決める</div>
+            </section>
+          </div>
+        </div>
+        <figcaption id="responsibility-caption">
+          GCはmemory管理、Disposeはresource lifetimeの終了を担当する。どちらか一方が他方を置き換える関係ではない。
+        </figcaption>
+      </figure>
+    </section>
+
+    <section aria-labelledby="gc-timing">
+      <h2 id="gc-timing">GCは「不要になった瞬間」の通知ではない</h2>
+      <p>
+        local variableがscopeを抜けたことと、そのobjectのmemoryが直ちに回収されることは同じではありません。
+        runtimeはallocation量や世代などを見てGCを実行します。そのため、objectが到達不能になってから回収されるまでの時間を
+        application codeは通常保証できません。GCが一度も必要にならないままprocessが終了する場合もあります。
+      </p>
+      <p>
+        finalizerを持つ型では、GCが到達不能を検出した後にfinalizer実行を待つ段階も入ります。finalizerはresource漏れに対する
+        最終的な安全網にはなりますが、「このmethodを抜ける前にfileを閉じる」という決定的なlifetime管理には使えません。
+        application developerが通常行うべきなのはGCやfinalizerを強制することではなく、公開された<code>Dispose</code>契約を守ることです。
+      </p>
+    </section>
+
+    <section aria-labelledby="dispose">
+      <h2 id="dispose">IDisposableは終了処理を呼び出せるという契約</h2>
+      <p>
+        <code>IDisposable</code>を実装する型は、利用者へ「使い終えた時点で<code>Dispose</code>を呼んでください」と伝えています。
+        <code>Dispose</code>が必ずOS handleを直接解放するとは限りません。内部のstreamを閉じる、connectionをpoolへ戻す、
+        timerを停止する、保持している別の<code>IDisposable</code>を破棄するなど、型が所有するresourceの終了処理全体を表します。
+      </p>
+      <pre><code>using (var stream = File.OpenRead(path))
+{
+    // streamを利用する
+} // scopeを抜けるとDisposeが呼ばれる</code></pre>
+      <p>
+        <code>using</code>は例外が起きても<code>Dispose</code>が呼ばれるようにする構文です。重要なのはmemoryを早く消すことではなく、
+        resourceを所有するscopeをコードで明確にし、その終了時にcleanupを保証することです。
+      </p>
+      <p>
+        <code>Dispose</code>後もwrapper objectのmanaged memoryが即座に消えるわけではありません。終了処理が済んだobjectは、
+        その後到達不能になればGCの対象になります。したがって、DisposeとGCは同じobjectのlifetime上で順番に関わることはあっても、
+        同じ処理ではありません。
+      </p>
+    </section>
+
+    <section aria-labelledby="ownership">
+      <h2 id="ownership">Disposeするかは「誰が所有しているか」で判断する</h2>
+      <p>
+        <code>IDisposable</code>を見つけたら無条件にその場でDisposeすればよいわけではありません。
+        resourceを生成してlifetimeを決める側が、通常はその終了にも責任を持ちます。method内で自分が
+        <code>File.OpenRead</code>したstreamはそのmethodが所有するため、<code>using</code>で閉じるのが自然です。
+      </p>
+      <p>
+        一方、DI containerから受け取ったserviceはcontainerが所有していることがあります。その場合、利用側が勝手にDisposeすると、
+        同じscope内の別処理が使うserviceまで終了させる可能性があります。ASP.NET Coreのscoped serviceならrequest scopeの終了時に
+        containerがDisposeします。大切なのは型名だけで判断せず、生成元とlifetime boundaryを確認することです。
+      </p>
+      <table>
+        <thead><tr><th>状況</th><th>通常の所有者</th><th>終了方法</th></tr></thead>
+        <tbody>
+          <tr><td>method内で<code>File.OpenRead</code>した</td><td>そのmethod</td><td><code>using</code>でscope終了時にDispose</td></tr>
+          <tr><td>DIからscoped serviceを受け取った</td><td>DI containerのscope</td><td>scope終了時にcontainerがDispose</td></tr>
+          <tr><td>通常のDTOやrecordを作った</td><td>managed runtime</td><td>到達不能になった後、GCがmemoryを回収</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="java">
+      <h2 id="java">Javaとの比較</h2>
+      <p>
+        JavaのGCと.NETのGCは、どちらも到達不能なmanaged objectのmemoryを自動管理します。
+        Javaでもfileやdatabase connectionをGC任せにせず、<code>AutoCloseable</code>をtry-with-resourcesで閉じます。
+        C#の<code>IDisposable</code>と<code>using</code>は、実務上ほぼ同じ判断に対応します。
+      </p>
+      <table>
+        <thead><tr><th>Java</th><th>C# / .NET</th><th>目的</th></tr></thead>
+        <tbody>
+          <tr><td>GC</td><td>GC</td><td>到達不能objectのmanaged memoryを回収</td></tr>
+          <tr><td><code>AutoCloseable</code></td><td><code>IDisposable</code></td><td>終了処理を公開する契約</td></tr>
+          <tr><td>try-with-resources</td><td><code>using</code></td><td>scope終了時のcleanupを保証</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="files">
+      <h2 id="files">変更対象ファイル</h2>
+      <table>
+        <thead><tr><th>パス</th><th>変更内容</th></tr></thead>
+        <tbody>
+          <tr><td><code>02-dotnet-foundations/docs/07-gc-and-disposable.html</code></td><td>GC、Dispose、所有権、Javaとの対応、理解確認を記載</td></tr>
+        </tbody>
+      </table>
+      <p>この説明課題ではapplication codeの変更はありません。</p>
+    </section>
+
+    <section aria-labelledby="check">
+      <h2 id="check">理解確認</h2>
+      <ol>
+        <li>使われなくなった通常のDTOについて、開発者が<code>Dispose</code>を書かなくてよいのはなぜですか。</li>
+        <li><code>FileStream</code>を「最終的にはGCされるから」という理由でDisposeしないことが問題なのはなぜですか。</li>
+        <li>DIから受け取った<code>IDisposable</code>なscoped serviceを、利用側が勝手にDisposeすべきでないのはなぜですか。</li>
+      </ol>
+      <p>GCとDisposeの対象、終了時点、所有者を分けて上の3問を説明できれば完了です。</p>
+    </section>
+  </main>
+</body>
+</html>

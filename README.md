@@ -176,7 +176,7 @@ dotnet format TypeSystemSamples/TypeSystemSamples.csproj
 
 ### 2. ランタイムと標準基盤
 
-- [ ] GC と `IDisposable` の責務の違いを説明できる。
+- [x] GC と `IDisposable` の責務の違いを説明できる。
 - [x] Generic Host を用いた `BackgroundService` を一つ実装する。
 - [x] DI に singleton / scoped / transient を登録し、各 lifetime を説明できる。
 - [x] scoped service を singleton に注入できない理由を確認する。
