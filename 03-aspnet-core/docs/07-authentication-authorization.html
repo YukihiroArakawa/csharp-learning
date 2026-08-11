@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>認証・認可とrole・policyを区別する</title>
+  <link rel="stylesheet" href="task.css">
+</head>
+<body>
+  <main>
+    <h1>認証・認可とrole・policyを区別する</h1>
+
+    <section aria-labelledby="overview">
+      <h2 id="overview">今回の課題</h2>
+      <ul>
+        <li>目安時間：25〜35分</li>
+        <li>前提：middleware pipelineとHTTP status codeを説明できる</li>
+        <li>目的：認証と認可を処理順に区別し、roleとpolicyを要件に応じて選べる</li>
+      </ul>
+      <p>
+        今回はauthentication providerを実際には追加しません。JWTを安全に検証するにはissuer、audience、署名鍵、
+        token発行元などの実環境情報が必要であり、それらを持たない偽のlogin処理には実務上の学習価値が低いためです。
+        代わりに、現場の認証設定を読んだときに「誰であるかの確定」と「その人に操作を許すかの判断」を追跡できることを目指します。
+      </p>
+    </section>
+
+    <section aria-labelledby="difference">
+      <h2 id="difference">認証と認可は別の質問に答える</h2>
+      <p>
+        認証（authentication）は、requestを送った主体が誰であるかを確認する処理です。JWT bearer tokenなら署名、issuer、audience、
+        有効期限などを検証し、成功するとuser ID、role、その他の属性をclaimとして持つ<code>ClaimsPrincipal</code>を作ります。
+        この段階では、特定endpointの操作を許可するかまでは決めません。
+      </p>
+      <p>
+        認可（authorization）は、認証によって得られたuser情報とendpointの要件を比較し、その操作を許可するか判断します。
+        「login済みなら閲覧可能」「Administrator roleだけ削除可能」「自分が所有するtaskだけ更新可能」などが認可です。
+        認可は通常、認証結果を材料にするため、pipeline上でも認証の後に評価されます。
+      </p>
+      <figure aria-labelledby="auth-flow-caption">
+        <div class="diagram-root">
+          <div class="diagram-title">保護されたendpointへ到達するまで</div>
+          <div class="diagram-flow">
+            <div class="diagram-node">Request<br>credentialを提示</div>
+            <div class="diagram-node">Authentication<br>あなたは誰か</div>
+            <div class="diagram-node">ClaimsPrincipal<br>user ID・role・claim</div>
+            <div class="diagram-node">Authorization<br>この操作を許すか</div>
+            <div class="diagram-node">Endpoint<br>業務処理を実行</div>
+          </div>
+        </div>
+        <figcaption id="auth-flow-caption">
+          認証がidentityを組み立て、認可がidentityとendpoint要件を比較する。両方を通過して初めて業務処理へ進む。
+        </figcaption>
+      </figure>
+    </section>
+
+    <section aria-labelledby="status">
+      <h2 id="status">401と403から失敗箇所を読む</h2>
+      <p>
+        保護されたAPIでcredentialがない、またはtokenを正しく検証できずuserを特定できない場合は、通常401 Unauthorizedになります。
+        名前にUnauthorizedとありますが、実務上は「まだ有効な認証が成立していない」と読みます。JWT bearer schemeなら、
+        clientへ必要な認証方式を知らせる<code>WWW-Authenticate: Bearer</code> headerを返すことがあります。
+      </p>
+      <p>
+        認証は成功したものの、必要なroleやpolicy requirementを満たさない場合は403 Forbiddenです。
+        serverは誰であるかを把握していますが、そのuserには操作を許していません。したがって、403をtoken未提示の問題として直したり、
+        401を権限不足として扱ったりすると、調査箇所を間違えます。
+      </p>
+      <table>
+        <thead><tr><th>結果</th><th>認証状態</th><th>意味</th></tr></thead>
+        <tbody>
+          <tr><td>401 Unauthorized</td><td>成立していない</td><td>有効なcredentialを提示して認証する必要がある</td></tr>
+          <tr><td>403 Forbidden</td><td>成立している</td><td>identityは分かるが、この操作の認可要件を満たさない</td></tr>
+        </tbody>
+      </table>
+      <p>
+        ASP.NET Core 10では、Minimal APIなど既知のAPI endpointにcookie認証を使った場合も、認証・認可失敗をlogin画面へのredirectではなく
+        401または403として返すのが既定です。browser pageとprogrammatic APIでは望ましい失敗表現が異なるためです。
+      </p>
+    </section>
+
+    <section aria-labelledby="roles">
+      <h2 id="roles">roleは「所属」を使う単純な認可</h2>
+      <p>
+        roleは、認証済みuserが<code>Administrator</code>、<code>Manager</code>、<code>Operator</code>などの集合に所属するかを確認します。
+        endpointの許可条件が組織上の役割だけで安定して表せる場合は、簡潔で読みやすい方法です。
+      </p>
+      <pre><code>app.MapDelete("/tasks/{id:int}", DeleteTask)
+    .RequireAuthorization(policy =&gt;
+        policy.RequireRole("Administrator"));</code></pre>
+      <p>
+        この例はAdministrator roleを持つuserだけに削除を許します。role名は認証時に作られたidentityのrole claimと照合されます。
+        ただしroleへ業務条件を詰め込み始めると、<code>AdministratorInTokyoDuringBusinessHours</code>のような不自然なroleが増えます。
+        roleは「何者として所属しているか」を表す用途に留めます。
+      </p>
+    </section>
+
+    <section aria-labelledby="policies">
+      <h2 id="policies">policyは「満たすべき条件」に名前を付ける</h2>
+      <p>
+        policyは一つ以上のauthorization requirementをまとめた名前付きルールです。roleだけでなく、特定claim、認証済みであること、
+        custom handlerによる業務判断などを組み合わせられます。endpoint側は実装詳細ではなく、必要なpermissionの意味を表すpolicy名を指定します。
+      </p>
+      <pre><code>builder.Services.AddAuthorizationBuilder()
+    .AddPolicy("CanManageTasks", policy =&gt;
+        policy.RequireClaim("permission", "tasks.manage"));
+
+app.MapPost("/tasks", CreateTask)
+    .RequireAuthorization("CanManageTasks");</code></pre>
+      <p>
+        <code>CanManageTasks</code>は、<code>permission=tasks.manage</code>というclaimを要求します。将来、Manager roleも許可する、
+        tenant条件を追加するなど要件が変わっても、endpointは同じpolicy名を参照したまま、中央の定義を変更できます。
+      </p>
+      <p>
+        「本人が所有するtaskだけ更新可能」のように対象resourceの内容を見なければ判断できない場合は、role文字列だけでは足りません。
+        resource IDから取得したtaskと現在userをauthorization handlerで比較するresource-based authorizationが適しています。
+      </p>
+    </section>
+
+    <section aria-labelledby="choice">
+      <h2 id="choice">roleとpolicyの使い分け</h2>
+      <table>
+        <thead><tr><th>要件</th><th>選択</th><th>理由</th></tr></thead>
+        <tbody>
+          <tr><td>管理画面はAdministratorだけ</td><td>role、またはroleを包むpolicy</td><td>所属だけで判断できる</td></tr>
+          <tr><td>tasks.manage permissionを持つuser</td><td>policy</td><td>roleではなくclaim条件を表す</td></tr>
+          <tr><td>18歳以上かつ本人確認済み</td><td>policy</td><td>複数requirementを組み合わせる</td></tr>
+          <tr><td>自分が所有するtaskだけ更新</td><td>resource-based policy</td><td>userだけでなく対象resourceも評価する</td></tr>
+        </tbody>
+      </table>
+      <p>
+        小さな固定要件ならrole指定で十分です。一方、業務上のpermission、複数条件、resourceとの関係を表すならpolicyを優先します。
+        policy内部で<code>RequireRole</code>を使うこともできるため、roleとpolicyは完全な二者択一ではありません。
+      </p>
+    </section>
+
+    <section aria-labelledby="spring">
+      <h2 id="spring">Spring Securityとの対応</h2>
+      <p>
+        Spring Securityでも、authenticationが<code>Authentication</code> objectを作り、authorizationがrequestやmethodの
+        access ruleを評価します。ASP.NET Coreの<code>ClaimsPrincipal</code>は認証済み主体を表し、endpointの
+        <code>RequireAuthorization</code>はSpring Securityのrequest authorizationや<code>@PreAuthorize</code>に近い役割です。
+      </p>
+      <table>
+        <thead><tr><th>Spring Security</th><th>ASP.NET Core</th></tr></thead>
+        <tbody>
+          <tr><td><code>Authentication</code></td><td><code>ClaimsPrincipal</code></td></tr>
+          <tr><td>filter chainでcredentialを検証</td><td>authentication handler / middleware</td></tr>
+          <tr><td>authority / role check</td><td>claim / role requirement</td></tr>
+          <tr><td><code>@PreAuthorize</code>などのrule</td><td>named policy / authorization handler</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="files">
+      <h2 id="files">変更対象ファイル</h2>
+      <table>
+        <thead><tr><th>パス</th><th>変更内容</th></tr></thead>
+        <tbody>
+          <tr><td><code>03-aspnet-core/docs/07-authentication-authorization.html</code></td><td>認証・認可、401・403、role・policyの判断基準と理解確認を追加</td></tr>
+        </tbody>
+      </table>
+      <p>
+        application codeの変更はありません。実在するissuerやtoken発行元が決まっていない状態では、安全な認証設定を完成できないためです。
+        上のcodeは現場の設定を読むための最小例であり、今回の<code>MinimalApiSample</code>には追加していません。
+      </p>
+    </section>
+
+    <section aria-labelledby="check">
+      <h2 id="check">理解確認</h2>
+      <ol>
+        <li>有効なtokenを提示していないrequestと、認証済みだが必要な権限を持たないrequestは、それぞれ通常401と403のどちらになりますか。</li>
+        <li>認証と認可は、それぞれrequest処理の中で何を決定しますか。</li>
+        <li>「Administratorだけ」と「task所有者本人だけ」では、roleとpolicyのどちらを選びますか。その理由も説明してください。</li>
+      </ol>
+      <p>identityの確定とaccess判断を分け、roleとpolicyの選択理由を説明できれば完了です。</p>
+    </section>
+  </main>
+</body>
+</html>
