@@ -1,5 +1,10 @@
 @host = http://localhost:5164
 
+GET {{host}}/openapi/v1.json
+Accept: application/json
+
+###
+
 GET {{host}}/tasks
 Accept: application/json
 

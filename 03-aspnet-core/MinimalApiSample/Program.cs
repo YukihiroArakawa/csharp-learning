@@ -2,10 +2,16 @@ using System.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddProblemDetails();
+builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
 app.UseExceptionHandler();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
 
 app.Use(async (context, next) =>
 {
@@ -46,7 +52,8 @@ if (app.Environment.IsDevelopment())
     {
         throw new InvalidOperationException(
             "Development-only failure for Problem Details verification.");
-    });
+    })
+    .ProducesProblem(StatusCodes.Status500InternalServerError);
 }
 
 app.MapGet("/tasks", (bool? completed) =>
@@ -59,7 +66,8 @@ app.MapGet("/tasks", (bool? completed) =>
     }
 
     return Results.Ok(result);
-});
+})
+.Produces<IEnumerable<TaskItem>>(StatusCodes.Status200OK);
 
 app.MapGet("/tasks/{id:int}", (int id) =>
 {
@@ -69,7 +77,9 @@ app.MapGet("/tasks/{id:int}", (int id) =>
         : Results.Ok(task);
 
     return result;
-});
+})
+.Produces<TaskItem>(StatusCodes.Status200OK)
+.Produces(StatusCodes.Status404NotFound);
 
 app.MapPost("/tasks", (CreateTaskRequest request) =>
 {
@@ -88,7 +98,9 @@ app.MapPost("/tasks", (CreateTaskRequest request) =>
     }
 
     return result;
-});
+})
+.Produces<TaskItem>(StatusCodes.Status201Created)
+.ProducesValidationProblem();
 
 app.Run();
 
