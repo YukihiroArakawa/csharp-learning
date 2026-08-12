@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>サービス層を直接呼ぶテストを読む</title>
+  <link rel="stylesheet" href="task.css">
+</head>
+<body>
+  <main>
+    <h1>サービス層を直接呼ぶテストを読む</h1>
+
+    <section aria-labelledby="overview">
+      <h2 id="overview">今回の課題</h2>
+      <ul>
+        <li>目安時間：35〜45分</li>
+        <li>前提：<code>DbContext</code>の役割と、LINQが<code>ToListAsync</code>で実行されることを説明できる</li>
+        <li>目的：HTTPを通さずサービスを直接呼び、検索条件・並び順・projectionを自動検証するテストを読めるようになる</li>
+      </ul>
+      <p>
+        Codexが、endpoint内にあったtask検索を<code>TaskQueryService</code>へ分離し、そのサービスをxUnitから直接呼ぶテストを
+        実装しました。学習者の作業はコードの手入力ではなく、production codeとtest codeの対応関係を読み、テストが何を保証し、
+        何を保証していないかを説明することです。
+      </p>
+    </section>
+
+    <section aria-labelledby="model">
+      <h2 id="model">サービス層を直接テストする意味</h2>
+      <p>
+        変更前の検索処理はMinimal APIのendpoint内にありました。この形でも動作しますが、検索処理だけを確認したくてもHTTP requestを
+        作り、routingを通し、responseを読み取る必要があります。検索条件の誤りなのか、HTTP周辺の設定の誤りなのかも切り分けにくくなります。
+      </p>
+      <p>
+        今回はendpointを「入力をサービスへ渡し、結果をHTTP responseにする場所」へ細くし、database queryを
+        <code>TaskQueryService</code>へ移します。テストはこのサービスを<code>new</code>で生成して直接呼びます。これによりrouting、model binding、
+        JSON serializationを対象外にし、<code>completed=false</code>なら未完了taskだけをID順に返す、というサービスの振る舞いへ集中できます。
+      </p>
+      <p>
+        ただし、このテストはSQLiteとEF Coreも実際に動かします。外部database serverには接続しませんが、純粋なbusiness logicだけを
+        isolationした厳密なunit testではなく、サービスとdatabase providerを組み合わせた小さなcomponent testに近い構成です。
+        repositoryをmockすればさらに狭いunit testにできますが、今回はLINQがSQLiteでも翻訳・実行できることを保証する価値を優先します。
+      </p>
+
+      <figure aria-labelledby="boundary-caption">
+        <div class="diagram-root">
+          <div class="diagram-title">productionとtestで異なる入口</div>
+          <div class="diagram-flow">
+            <div class="diagram-node">production<br>HTTP endpoint</div>
+            <div class="diagram-node">TaskQueryService<br>検索条件とquery</div>
+            <div class="diagram-node">TaskDbContext<br>EF Core</div>
+            <div class="diagram-node">SQLite<br>productionはfile<br>testはmemory</div>
+          </div>
+          <div class="diagram-flow">
+            <div class="diagram-node">test<br>xUnit method</div>
+            <div class="diagram-node">TaskQueryServiceを<br>直接newして呼ぶ</div>
+          </div>
+        </div>
+        <figcaption id="boundary-caption">
+          testはHTTP層を迂回するが、サービスより下のEF CoreとSQLiteは実物を使う。
+        </figcaption>
+      </figure>
+    </section>
+
+    <section aria-labelledby="xunit">
+      <h2 id="xunit">xUnitとテストメソッドの形</h2>
+      <p>
+        xUnitは.NETで使われるtest frameworkの一つです。JavaのJUnitと同じく、属性を付けたmethodをtest runnerが発見して実行します。
+        <code>[Fact]</code>は引数を取らない一つのtest caseを表し、JUnit 5の<code>@Test</code>に近い役割です。
+      </p>
+      <pre><code>[Fact]
+public async Task GetTasksAsync_WhenCompletedIsFalse_ReturnsIncompleteTasksInIdOrder()</code></pre>
+      <p>
+        method名は「対象method」「条件」「期待結果」を並べています。C#の<code>async Task</code> testでは、非同期処理を
+        <code>await</code>できます。<code>async void</code>にはせず、runnerが完了と例外を追跡できる<code>Task</code>を返します。
+      </p>
+      <p>
+        test本体はArrange（前提を準備）、Act（対象を実行）、Assert（結果を検証）の順です。コメントに依存せず、空行と変数名で
+        三つの段階を読めるようにしています。
+      </p>
+    </section>
+
+    <section aria-labelledby="sqlite-memory">
+      <h2 id="sqlite-memory">SQLiteのインメモリdatabase</h2>
+      <p>
+        <code>Data Source=:memory:</code>はfileではなくmemory上にdatabaseを作ります。各testで新しいconnectionを作るため、以前のtest dataや
+        localの<code>tasks.db</code>に左右されません。<code>EnsureCreatedAsync</code>は現在のEF Core modelからtest用schemaを作り、その後に
+        test専用dataを保存します。
+      </p>
+      <p>
+        重要なのはconnectionを開いたままにすることです。SQLiteのインメモリdatabaseはconnectionに属し、connectionを閉じるとdatabaseも
+        消えます。そのため、connectionを開く、schemaとdataを準備する、サービスを実行する、assertする、という一連の処理が終わるまで
+        同じconnectionを保持します。<code>await using</code>によりtest methodを抜ける際には非同期に破棄されます。
+      </p>
+    </section>
+
+    <section aria-labelledby="files">
+      <h2 id="files">変更対象ファイル</h2>
+      <table>
+        <thead><tr><th>ファイル</th><th>変更内容</th></tr></thead>
+        <tbody>
+          <tr><td><code>04-data-and-testing/TaskApi/Services/TaskQueryService.cs</code></td><td>task検索queryを実行するscoped serviceを新規作成</td></tr>
+          <tr><td><code>04-data-and-testing/TaskApi/Program.cs</code></td><td>serviceをDIへ登録し、endpointから呼び出すよう変更</td></tr>
+          <tr><td><code>04-data-and-testing/TaskApi.Tests/TaskApi.Tests.csproj</code></td><td>xUnit test projectとproduction projectへの参照を追加</td></tr>
+          <tr><td><code>04-data-and-testing/TaskApi.Tests/TaskQueryServiceTests.cs</code></td><td>SQLiteインメモリdatabaseを使うservice testを新規作成</td></tr>
+          <tr><td><code>04-data-and-testing/docs/04-service-test.html</code></td><td>この課題説明を新規作成</td></tr>
+        </tbody>
+      </table>
+      <p>この段階では理解確認前なので、rootの<code>README.md</code>は変更しません。</p>
+    </section>
+
+    <section aria-labelledby="production-code">
+      <h2 id="production-code">実装コード：production側</h2>
+      <h3><code>04-data-and-testing/TaskApi/Services/TaskQueryService.cs</code></h3>
+      <pre><code>public sealed class TaskQueryService(TaskDbContext dbContext)
+{
+    public async Task&lt;IReadOnlyList&lt;TaskSummary&gt;&gt; GetTasksAsync(
+        bool? completed,
+        CancellationToken cancellationToken)
+    {
+        IQueryable&lt;TaskItem&gt; query = dbContext.Tasks.AsNoTracking();
+
+        if (completed is not null)
+        {
+            query = query.Where(task =&gt; task.IsCompleted == completed.Value);
+        }
+
+        return await query
+            .OrderBy(task =&gt; task.Id)
+            .Select(task =&gt; new TaskSummary(
+                task.Id,
+                task.Title,
+                task.IsCompleted,
+                task.Category == null ? null : task.Category.Name))
+            .ToListAsync(cancellationToken);
+    }
+}</code></pre>
+      <p>
+        primary constructorでrequest scopeの<code>TaskDbContext</code>を受け取ります。public methodの入力は任意の完了状態とキャンセル通知、
+        出力は取得済みの読み取り専用listです。<code>IQueryable</code>を呼び出し側へ返さず、このmethod内の<code>ToListAsync</code>で
+        database I/Oまで完結させます。
+      </p>
+
+      <h3><code>04-data-and-testing/TaskApi/Program.cs</code></h3>
+      <pre><code>builder.Services.AddScoped&lt;TaskQueryService&gt;();
+
+app.MapGet("/tasks", async (
+    bool? completed,
+    TaskQueryService taskQueryService,
+    CancellationToken cancellationToken) =&gt;
+{
+    var tasks = await taskQueryService.GetTasksAsync(completed, cancellationToken);
+    return Results.Ok(tasks);
+});</code></pre>
+      <p>
+        application起動時にserviceをscoped lifetimeとして登録します。requestが来るとASP.NET Coreが、そのrequest用の
+        <code>TaskQueryService</code>と<code>TaskDbContext</code>を同じscopeから解決します。endpointはquery parameterと停止通知をserviceへ渡し、
+        取得結果を200 responseへ変換するだけになりました。
+      </p>
+    </section>
+
+    <section aria-labelledby="test-code">
+      <h2 id="test-code">実装コード：test側</h2>
+      <h3><code>04-data-and-testing/TaskApi.Tests/TaskQueryServiceTests.cs</code></h3>
+      <pre><code>[Fact]
+public async Task GetTasksAsync_WhenCompletedIsFalse_ReturnsIncompleteTasksInIdOrder()
+{
+    SQLitePCL.Batteries_V2.Init();
+
+    await using var connection = new SqliteConnection("Data Source=:memory:");
+    await connection.OpenAsync();
+
+    var options = new DbContextOptionsBuilder&lt;TaskDbContext&gt;()
+        .UseSqlite(connection)
+        .Options;
+
+    await using var dbContext = new TaskDbContext(options);
+    await dbContext.Database.EnsureCreatedAsync();
+
+    var learning = new TaskCategory { Name = "学習" };
+    dbContext.Tasks.AddRange(
+        new TaskItem { Id = 3, Title = "テストを読む", IsCompleted = false },
+        new TaskItem { Id = 1, Title = "EF Coreを学ぶ", IsCompleted = false, Category = learning },
+        new TaskItem { Id = 2, Title = "migrationを作る", IsCompleted = true });
+    await dbContext.SaveChangesAsync();
+
+    var service = new TaskQueryService(dbContext);
+
+    var tasks = await service.GetTasksAsync(false, CancellationToken.None);
+
+    Assert.Collection(
+        tasks,
+        task =&gt;
+        {
+            Assert.Equal(1, task.Id);
+            Assert.Equal("EF Coreを学ぶ", task.Title);
+            Assert.Equal("学習", task.CategoryName);
+        },
+        task =&gt;
+        {
+            Assert.Equal(3, task.Id);
+            Assert.Equal("テストを読む", task.Title);
+            Assert.Null(task.CategoryName);
+        });
+}</code></pre>
+      <p>
+        Arrangeでは、順序がわざと<code>3, 1, 2</code>になるようdataを追加しています。完了済みtaskも混ぜ、categoryあり・なしも用意します。
+        Actでは<code>false</code>を渡してserviceを一度だけ呼びます。Assertでは要素数、順番、ID、title、category projectionをまとめて確認します。
+      </p>
+      <p>
+        <code>Assert.Collection</code>はcollectionの要素数と順序を同時に検証します。ここでは二つの検証lambdaを渡しているため、結果が
+        ちょうど2件で、1件目と2件目がそれぞれ期待どおりでなければ失敗します。完了済みID 2が混入した場合も、ID順でない場合も失敗します。
+      </p>
+    </section>
+
+    <section aria-labelledby="verification">
+      <h2 id="verification">検証方法と観測結果</h2>
+      <pre><code>cd /home/yukihiro/Workspace/c#-learning/04-data-and-testing
+nix develop -c dotnet test TaskApi.Tests/TaskApi.Tests.csproj</code></pre>
+      <p>
+        実行結果は<code>Passed: 1, Failed: 0, Skipped: 0</code>でした。test runnerが<code>[Fact]</code>を発見し、test用databaseの作成、
+        data保存、serviceのquery実行、assertまで完了しています。
+      </p>
+    </section>
+
+    <section aria-labelledby="assignment">
+      <h2 id="assignment">コードリーディング課題</h2>
+      <p>次の3問へ、該当するコードを根拠に答えてください。</p>
+      <ol>
+        <li>このtestがHTTP endpointではなく<code>TaskQueryService</code>を直接呼ぶことで、検証対象から外しているASP.NET Coreの処理を二つ挙げてください。</li>
+        <li>SQLite connectionを<code>SaveChangesAsync</code>の直後に閉じると、その後の<code>GetTasksAsync</code>は期待どおり動きません。なぜですか。</li>
+        <li>完了済みのID 2が誤って結果へ含まれた場合と、未完了taskがID 3、ID 1の順で返った場合に、<code>Assert.Collection</code>が失敗する理由をそれぞれ説明してください。</li>
+      </ol>
+    </section>
+
+    <section aria-labelledby="completion">
+      <h2 id="completion">完了条件</h2>
+      <ul>
+        <li>serviceへ分離したことでHTTP層とquery処理の責任がどう分かれたか説明できる</li>
+        <li>test用SQLite databaseの生存期間がconnectionの生存期間と一致することを説明できる</li>
+        <li>Arrange・Act・Assertと、今回のassertが保証するfilter・order・projectionを対応付けられる</li>
+        <li><code>dotnet test</code>が1件成功する</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

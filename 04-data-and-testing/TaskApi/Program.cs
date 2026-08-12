@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TaskApi.Data;
-using TaskApi.Models;
+using TaskApi.Services;
 
 SQLitePCL.Batteries_V2.Init();
 
@@ -12,6 +12,7 @@ var connectionString = builder.Configuration.GetConnectionString("TaskDatabase")
 
 builder.Services.AddDbContext<TaskDbContext>(options =>
     options.UseSqlite(connectionString));
+builder.Services.AddScoped<TaskQueryService>();
 
 var app = builder.Build();
 
@@ -19,24 +20,10 @@ app.MapGet("/", () => Results.Ok(new { Status = "ready" }));
 
 app.MapGet("/tasks", async (
     bool? completed,
-    TaskDbContext dbContext,
+    TaskQueryService taskQueryService,
     CancellationToken cancellationToken) =>
 {
-    IQueryable<TaskItem> query = dbContext.Tasks.AsNoTracking();
-
-    if (completed is not null)
-    {
-        query = query.Where(task => task.IsCompleted == completed.Value);
-    }
-
-    var tasks = await query
-        .OrderBy(task => task.Id)
-        .Select(task => new TaskSummary(
-            task.Id,
-            task.Title,
-            task.IsCompleted,
-            task.Category == null ? null : task.Category.Name))
-        .ToListAsync(cancellationToken);
+    var tasks = await taskQueryService.GetTasksAsync(completed, cancellationToken);
 
     return Results.Ok(tasks);
 });
