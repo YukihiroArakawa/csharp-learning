@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LINQがSQLへ翻訳される境界を読む</title>
+  <link rel="stylesheet" href="task.css">
+</head>
+<body>
+  <main>
+    <h1>LINQがSQLへ翻訳される境界を読む</h1>
+
+    <section aria-labelledby="overview">
+      <h2 id="overview">今回の課題</h2>
+      <ul>
+        <li>目安時間：35〜45分</li>
+        <li>前提：LINQの遅延実行、<code>IEnumerable&lt;T&gt;</code>と<code>IQueryable&lt;T&gt;</code>の違いを説明できる</li>
+        <li>目的：EF Coreがqueryを組み立てる段階と、SQLへ翻訳してdatabaseへ送る段階をコードから特定する</li>
+      </ul>
+      <p>
+        CodexがSQLiteからtask一覧を取得する<code>GET /tasks</code>を実装しました。query parameterがある場合だけ絞り込み、
+        category名を含むresponseへprojectionします。学習者はLINQ methodと実際のSQLを対応付け、どの行でdatabase I/Oが
+        始まるかを読みます。
+      </p>
+    </section>
+
+    <section aria-labelledby="queryable">
+      <h2 id="queryable">IQueryableは結果ではなくqueryの設計図</h2>
+      <p>
+        <code>dbContext.Tasks</code>から始まるLINQは、通常の<code>List&lt;TaskItem&gt;</code>をmemory上で絞り込む処理ではありません。
+        EF Core providerが理解できるexpression treeとして「どのtableから、どの条件で、どの順序・形のdataを取るか」を蓄積します。
+        <code>Where</code>や<code>Select</code>を呼んだ段階では、まだSQLをdatabaseへ送っていません。
+      </p>
+      <p>
+        最後に<code>ToListAsync</code>などのterminal operationを呼ぶと、EF Coreは完成したexpression treeをdatabase providerへ渡します。
+        SQLite providerがSQLへ翻訳し、parameterとともにdatabaseへ送信します。返されたrowを<code>TaskSummary</code>へmaterializeして、
+        <code>List&lt;TaskSummary&gt;</code>としてapplicationへ戻します。
+      </p>
+      <figure aria-labelledby="translation-caption">
+        <div class="diagram-root">
+          <div class="diagram-title">query構築から結果取得まで</div>
+          <div class="diagram-flow">
+            <div class="diagram-node">DbSet&lt;TaskItem&gt;<br>IQueryableの起点</div>
+            <div class="diagram-node">Where・OrderBy・Select<br>expression treeを構築</div>
+            <div class="diagram-node">ToListAsync<br>実行を要求</div>
+            <div class="diagram-node">SQLite provider<br>SQLへ翻訳・送信</div>
+            <div class="diagram-node">List&lt;TaskSummary&gt;<br>結果をmaterialize</div>
+          </div>
+        </div>
+        <figcaption id="translation-caption">
+          LINQの各methodが個別にSQLを送るのではなく、ToListAsyncでquery全体が一つのSQLとして実行される。
+        </figcaption>
+      </figure>
+    </section>
+
+    <section aria-labelledby="implementation">
+      <h2 id="implementation">実装を実行順に読む</h2>
+      <pre><code>app.MapGet("/tasks", async (
+    bool? completed,
+    TaskDbContext dbContext,
+    CancellationToken cancellationToken) =&gt;
+{</code></pre>
+      <p>
+        Minimal APIが<code>completed</code>をquery parameter、<code>TaskDbContext</code>をrequest scopeのDI、
+        <code>CancellationToken</code>をrequest中断通知からbindingします。client切断やrequest timeoutでキャンセルされれば、
+        下流のdatabase I/Oにも停止要求を伝えられます。
+      </p>
+
+      <pre><code>IQueryable&lt;TaskItem&gt; query = dbContext.Tasks.AsNoTracking();</code></pre>
+      <p>
+        ここでは<code>Tasks</code> tableをqueryする起点を作っただけで、database accessはまだ発生しません。
+        <code>AsNoTracking</code>は取得entityを更新予定がないことをEF Coreへ伝え、change trackerへ登録する処理を省きます。
+        読み取り専用endpointに適した指定です。
+      </p>
+
+      <pre><code>if (completed is not null)
+{
+    query = query.Where(
+        task =&gt; task.IsCompleted == completed.Value);
+}</code></pre>
+      <p>
+        query parameterが指定された場合だけexpression treeへfilterを追加します。lambdaは通常のC# delegateとして各rowに対して
+        実行されるのではなく、EF Coreが解析してSQLの<code>WHERE</code>へ変換します。値はSQL文字列へ直接連結されず、
+        <code>@completed_Value</code> parameterとして送られます。
+      </p>
+
+      <pre><code>var tasks = await query
+    .OrderBy(task =&gt; task.Id)
+    .Select(task =&gt; new TaskSummary(
+        task.Id,
+        task.Title,
+        task.IsCompleted,
+        task.Category == null ? null : task.Category.Name))
+    .ToListAsync(cancellationToken);</code></pre>
+      <p>
+        <code>OrderBy</code>は結果順を安定させます。<code>Select</code>はentity全体ではなくresponseに必要な4項目だけを選びます。
+        optional relationの<code>Category</code>を参照するため、EF Coreはcategoryなしのtaskも残る<code>LEFT JOIN</code>を生成します。
+      </p>
+      <p>
+        <code>ToListAsync</code>が実行境界です。この行で初めてquery全体がSQLへ翻訳・送信され、結果を非同期に読み取ります。
+        <code>await</code>後の<code>tasks</code>は<code>IQueryable</code>ではなく、取得済みのmemory上のlistです。
+      </p>
+    </section>
+
+    <section aria-labelledby="sql">
+      <h2 id="sql">実際に生成されたSQL</h2>
+      <pre><code>SELECT "t"."Id", "t"."Title", "t"."IsCompleted", "c"."Name"
+FROM "Tasks" AS "t"
+LEFT JOIN "Categories" AS "c" ON "t"."CategoryId" = "c"."Id"
+WHERE "t"."IsCompleted" = @completed_Value
+ORDER BY "t"."Id"</code></pre>
+      <table>
+        <thead><tr><th>LINQ</th><th>生成SQL</th></tr></thead>
+        <tbody>
+          <tr><td><code>dbContext.Tasks</code></td><td><code>FROM "Tasks"</code></td></tr>
+          <tr><td><code>task.Category.Name</code>をprojection</td><td><code>LEFT JOIN "Categories"</code></td></tr>
+          <tr><td><code>Where</code></td><td><code>WHERE ... = @completed_Value</code></td></tr>
+          <tr><td><code>OrderBy</code></td><td><code>ORDER BY "t"."Id"</code></td></tr>
+          <tr><td><code>Select</code></td><td>SELECTする4 columnだけを列挙</td></tr>
+          <tr><td><code>ToListAsync</code></td><td>完成したSQLを送信してrowを取得</td></tr>
+        </tbody>
+      </table>
+      <p>
+        <code>completed=false</code>に対し、未完了task 2件だけが返りました。categoryを持つtaskでは<code>categoryName</code>が
+        <code>"学習"</code>、持たないtaskでは<code>null</code>でした。optional relationと<code>LEFT JOIN</code>の結果が一致しています。
+      </p>
+    </section>
+
+    <section aria-labelledby="boundary">
+      <h2 id="boundary">IQueryableを層の外へ漏らさない理由</h2>
+      <p>
+        <code>IQueryable</code>は未実行queryなので、呼び出し側がさらに条件を追加したり、複数回列挙して複数回SQLを実行したりできます。
+        どのSQLがいつ実行されるか、<code>DbContext</code>がまだ有効か、どこまでがdatabase側評価かが曖昧になります。
+      </p>
+      <p>
+        database accessを担当する層でfilter・projection・materializationを完了し、上位層へは<code>List&lt;TaskSummary&gt;</code>など
+        取得済み結果を返すと、I/O boundaryとquery責任が明確になります。すべてのarchitectureで絶対禁止という意味ではありませんが、
+        意図せずqueryを変更・再実行できるAPIを公開しないことが安全なdefaultです。
+      </p>
+    </section>
+
+    <section aria-labelledby="java">
+      <h2 id="java">JPA / Hibernateとの比較</h2>
+      <p>
+        Spring Data JPAのrepository methodやCriteria API、JPQLを実行時にSQLへ変換する流れに近いです。
+        LINQではC#のlambdaとmethod chainがexpression treeになり、providerが解析します。
+        Java Streamの<code>filter</code>を既に取得済みcollectionへ適用する場合とは異なり、ここではfilterがdatabaseへ押し込まれます。
+      </p>
+      <table>
+        <thead><tr><th>Java / JPA</th><th>EF Core</th></tr></thead>
+        <tbody>
+          <tr><td>Criteria / JPQL queryを構築</td><td><code>IQueryable</code> LINQを構築</td></tr>
+          <tr><td><code>getResultList</code></td><td><code>ToListAsync</code></td></tr>
+          <tr><td>DTO projection</td><td><code>Select</code>でrecordへprojection</td></tr>
+          <tr><td>read-only queryのtracking判断</td><td><code>AsNoTracking</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="files">
+      <h2 id="files">変更対象ファイル</h2>
+      <table>
+        <thead><tr><th>パス</th><th>変更内容</th></tr></thead>
+        <tbody>
+          <tr><td><code>04-data-and-testing/TaskApi/Program.cs</code></td><td>filter、projection、非同期materializationを行うGET endpointを追加</td></tr>
+          <tr><td><code>04-data-and-testing/TaskApi/Models/TaskSummary.cs</code></td><td>一覧response用のread modelを追加</td></tr>
+          <tr><td><code>04-data-and-testing/TaskApi/appsettings.Development.json</code></td><td>Development環境でEF Coreの実行SQLをInformation logへ出す</td></tr>
+          <tr><td><code>04-data-and-testing/TaskApi/TaskApi.http</code></td><td>全件取得とcompleted絞り込みrequestを追加</td></tr>
+          <tr><td><code>04-data-and-testing/TaskApi/Properties/launchSettings.json</code></td><td>Development環境と検証用URLを追加</td></tr>
+          <tr><td><code>04-data-and-testing/docs/03-linq-to-sql.html</code></td><td>query構築、実行境界、生成SQL、理解確認を記録</td></tr>
+        </tbody>
+      </table>
+      <p>
+        検証dataはignore済みの<code>04-data-and-testing/TaskApi/tasks.db</code>だけへ追加しました。
+        source codeやmigrationにはseed dataを追加していません。
+      </p>
+    </section>
+
+    <section aria-labelledby="verification">
+      <h2 id="verification">確認方法と観察結果</h2>
+      <pre><code>cd 04-data-and-testing
+dotnet format TaskApi/TaskApi.csproj --verify-no-changes
+dotnet build TaskApi/TaskApi.csproj
+nix develop --command dotnet run --no-build \
+  --project TaskApi/TaskApi.csproj</code></pre>
+      <p>
+        このprojectは脆弱性警告のあったbundled SQLiteを避け、<code>flake.nix</code>が提供するsystem SQLiteを使います。
+        そのため、shellでdirenvを有効にしていない場合は<code>nix develop --command</code>を付けて起動します。
+        通常は一度<code>direnv allow</code>した後、phase directoryへ移動すれば同じ環境が自動で有効になります。
+      </p>
+      <pre><code>curl -i 'http://localhost:5184/tasks?completed=false'</code></pre>
+      <p>
+        responseは200で、未完了task 2件を返しました。server logではparameterizedされた<code>WHERE</code>、optional relationの
+        <code>LEFT JOIN</code>、<code>ORDER BY</code>を含むSQLが1回だけ実行されました。
+        formatterとbuildは成功し、buildのwarningとerrorはいずれも0件でした。検証用APIも停止済みです。
+      </p>
+    </section>
+
+    <section aria-labelledby="review">
+      <h2 id="review">コードリーディング課題</h2>
+      <ol>
+        <li><code>Where</code>を呼んだ時点と<code>ToListAsync</code>を呼んだ時点では、database accessの有無がどう違いますか。</li>
+        <li>生成SQLの<code>WHERE</code>、<code>LEFT JOIN</code>、<code>ORDER BY</code>は、それぞれどのLINQ記述から生まれましたか。</li>
+        <li>この読み取り専用endpointで<code>AsNoTracking</code>を使う理由と、<code>ToListAsync</code>へ<code>CancellationToken</code>を渡す理由を説明してください。</li>
+      </ol>
+      <p>query構築とI/O実行の境界を示し、LINQとSQLを対応付けられれば完了です。</p>
+    </section>
+  </main>
+</body>
+</html>

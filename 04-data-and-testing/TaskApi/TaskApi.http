@@ -1,0 +1,9 @@
+@host = http://localhost:5184
+
+GET {{host}}/tasks
+Accept: application/json
+
+###
+
+GET {{host}}/tasks?completed=false
+Accept: application/json
