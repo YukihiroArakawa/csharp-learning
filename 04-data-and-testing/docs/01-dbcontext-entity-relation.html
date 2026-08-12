@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DbContext・entity・relationを定義する</title>
+  <link rel="stylesheet" href="task.css">
+</head>
+<body>
+  <main>
+    <h1>DbContext・entity・relationを定義する</h1>
+
+    <section aria-labelledby="overview">
+      <h2 id="overview">今回の課題</h2>
+      <ul>
+        <li>目安時間：35〜45分</li>
+        <li>前提：DIのscoped lifetime、classとproperty、nullable型を読める</li>
+        <li>目的：EF CoreがC# objectとrelational databaseの対応を組み立てる入口を理解する</li>
+      </ul>
+      <p>
+        Codexがフェーズ4の<code>TaskApi</code>を作り、SQLite用の<code>DbContext</code>、二つのentity、
+        categoryとtaskの1対多relationを定義します。学習者はコードを手入力せず、C#のpropertyがdatabase model上で
+        primary key、foreign key、column、navigationへどう対応するかを読み取ります。
+      </p>
+      <p>
+        今回はdatabase schemaをまだ作りません。C#側のmodelを定義してEF Coreが認識できることまでを扱い、
+        そのmodelからmigrationとSQLite databaseを作る作業は次の課題へ分けます。
+      </p>
+    </section>
+
+    <section aria-labelledby="mental-model">
+      <h2 id="mental-model">DbContextは何を担当するのか</h2>
+      <p>
+        <code>DbContext</code>は単なるdatabase connectionではありません。どのC# classを永続化対象とするか、
+        propertyをどのcolumnとして扱うか、entity間をどのforeign keyで結ぶかというmodelを保持します。
+        runtimeではqueryを組み立て、databaseから読んだentityを追跡し、<code>SaveChanges</code>時に必要なSQLを生成する
+        作業単位にもなります。
+      </p>
+      <p>
+        entity instanceそのものがSQLを実行するActive Record形式ではありません。applicationは<code>DbContext</code>を通じて
+        entity集合へアクセスします。このため、同じ業務処理で読んだentityと変更したentityを一つのcontextが追跡できるよう、
+        ASP.NET Coreでは通常、一つのHTTP requestに一つの<code>DbContext</code>を割り当てます。
+      </p>
+      <figure aria-labelledby="model-caption">
+        <div class="diagram-root">
+          <div class="diagram-title">C# modelとdatabase schemaをDbContextが対応付ける</div>
+          <div class="diagram-flow">
+            <div class="diagram-node">TaskCategory<br>principal・1件側</div>
+            <div class="diagram-node">TaskDbContext<br>model・query・change tracking</div>
+            <div class="diagram-node">TaskItem<br>dependent・複数側</div>
+            <div class="diagram-node">SQLite<br>Categories / Tasks tables</div>
+          </div>
+        </div>
+        <figcaption id="model-caption">
+          DbContextは二つのentityとrelationをmodelとして保持し、次の課題でmigrationを介してtable定義へ変換する。
+        </figcaption>
+      </figure>
+    </section>
+
+    <section aria-labelledby="relation">
+      <h2 id="relation">TaskCategoryとTaskItemの1対多relation</h2>
+      <p>
+        一つのcategoryには複数のtaskを所属させられます。一つのtaskが参照できるcategoryは最大一つです。
+        categoryを持たないtaskも許可するため、これはoptionalな1対多relationです。
+      </p>
+      <table>
+        <thead><tr><th>要素</th><th>今回の型・property</th><th>意味</th></tr></thead>
+        <tbody>
+          <tr><td>Principal</td><td><code>TaskCategory</code></td><td>1件側。参照されるprimary keyを持つ</td></tr>
+          <tr><td>Dependent</td><td><code>TaskItem</code></td><td>複数側。foreign keyを持つ</td></tr>
+          <tr><td>Foreign key</td><td><code>TaskItem.CategoryId</code></td><td>categoryの<code>Id</code>を参照する</td></tr>
+          <tr><td>Reference navigation</td><td><code>TaskItem.Category</code></td><td>taskからcategory objectをたどる</td></tr>
+          <tr><td>Collection navigation</td><td><code>TaskCategory.Tasks</code></td><td>categoryから所属taskをたどる</td></tr>
+        </tbody>
+      </table>
+      <p>
+        <code>CategoryId</code>が<code>int?</code>、<code>Category</code>が<code>TaskCategory?</code>なのは、categoryなしを
+        <code>null</code>で表せるようにするためです。C#のnullabilityはcompile時の警告だけでなく、EF Core modelでは
+        relationとcolumnがoptionalかrequiredかを判断する情報にもなります。
+      </p>
+    </section>
+
+    <section aria-labelledby="java">
+      <h2 id="java">JPA / Hibernateとの比較</h2>
+      <p>
+        JPAで<code>@Entity</code>を付けたclassと<code>EntityManager</code>を使う構成に近いですが、EF Coreでは規約、attribute、
+        <code>ModelBuilder</code>の三つを組み合わせられます。今回はkeyなどの明白な部分を規約に任せ、relationと削除時の挙動を
+        Fluent APIで明示しました。
+      </p>
+      <table>
+        <thead><tr><th>JPA / Hibernate</th><th>EF Core</th></tr></thead>
+        <tbody>
+          <tr><td><code>EntityManager</code> / persistence context</td><td><code>DbContext</code></td></tr>
+          <tr><td><code>@Entity</code> class</td><td>modelへ含まれるentity class</td></tr>
+          <tr><td><code>@OneToMany</code> / <code>@ManyToOne</code></td><td><code>HasOne().WithMany()</code></td></tr>
+          <tr><td><code>@JoinColumn</code></td><td><code>HasForeignKey()</code></td></tr>
+        </tbody>
+      </table>
+      <p>
+        EF Coreでは<code>Id</code>というproperty名をprimary keyとみなすなど、規約だけでも多くを推論します。
+        ただし重要なrelationや削除方針を明示すると、model変更時に意図を読み取りやすくなります。
+      </p>
+    </section>
+
+    <section aria-labelledby="files">
+      <h2 id="files">変更対象ファイル</h2>
+      <table>
+        <thead><tr><th>パス</th><th>変更内容</th></tr></thead>
+        <tbody>
+          <tr><td><code>04-data-and-testing/TaskApi/TaskApi.csproj</code></td><td>EF Core SQLite provider、system SQLite adapter、design-time packageを追加</td></tr>
+          <tr><td><code>04-data-and-testing/TaskApi/Program.cs</code></td><td>connection stringを読み、TaskDbContextをDIへ登録</td></tr>
+          <tr><td><code>04-data-and-testing/TaskApi/appsettings.json</code></td><td>SQLite connection stringを定義</td></tr>
+          <tr><td><code>04-data-and-testing/TaskApi/Data/TaskDbContext.cs</code></td><td>DbSet、property制約、1対多relationを定義</td></tr>
+          <tr><td><code>04-data-and-testing/TaskApi/Models/TaskItem.cs</code></td><td>task entityとforeign key、reference navigationを定義</td></tr>
+          <tr><td><code>04-data-and-testing/TaskApi/Models/TaskCategory.cs</code></td><td>category entityとcollection navigationを定義</td></tr>
+          <tr><td><code>04-data-and-testing/.config/dotnet-tools.json</code></td><td>modelとmigrationを扱うdotnet-efをlocal toolとして固定</td></tr>
+          <tr><td><code>04-data-and-testing/flake.nix</code></td><td>system SQLiteのCLIとnative library pathを開発環境へ提供</td></tr>
+          <tr><td><code>04-data-and-testing/docs/task.css</code></td><td>フェーズ4教材の共通styleを追加</td></tr>
+          <tr><td><code>04-data-and-testing/docs/01-dbcontext-entity-relation.html</code></td><td>今回の説明、実装、確認結果、読解課題を記録</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="code">
+      <h2 id="code">実装したコード</h2>
+
+      <h3>TaskApi.csprojとsystem SQLite</h3>
+      <pre><code>&lt;PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite.Core" Version="10.0.10" /&gt;
+&lt;PackageReference Include="SQLitePCLRaw.bundle_sqlite3" Version="2.1.11" /&gt;</code></pre>
+      <p>
+        通常の<code>Microsoft.EntityFrameworkCore.Sqlite</code>を最初に復元したところ、同梱されるnative SQLite packageに
+        既知のHigh severity脆弱性警告が出ました。そのpackageには修正版が公開されていないため、native libraryを同梱しない
+        <code>Sqlite.Core</code>と、OS側の<code>sqlite3</code>へ接続するadapterを選びました。
+        このrepositoryでは<code>flake.nix</code>がSQLiteを実行環境へ提供し、<code>LD_LIBRARY_PATH</code>でnative loaderへ
+        libraryの場所を伝えます。
+      </p>
+      <pre><code>SQLitePCL.Batteries_V2.Init();</code></pre>
+      <p>
+        application起動時にsystem SQLite providerを初期化します。NuGetだけでnative libraryが完結しない代わりに、
+        runtime環境が互換な<code>sqlite3</code>を提供する必要があります。package選択とdeployment環境の依存はセットで考えます。
+      </p>
+
+      <h3>Models/TaskCategory.cs</h3>
+      <pre><code>public sealed class TaskCategory
+{
+    public int Id { get; set; }
+    public required string Name { get; set; }
+    public ICollection&lt;TaskItem&gt; Tasks { get; } = new List&lt;TaskItem&gt;();
+}</code></pre>
+      <p>
+        <code>Id</code>はEF Coreの規約でprimary keyになります。<code>Name</code>の<code>required</code>は、object生成時に
+        呼び出し側が値を設定しなければならないことをcompilerへ伝えます。<code>Tasks</code>はcategoryに所属する複数taskを表す
+        collection navigationです。空collectionで初期化しているので、関連taskが0件でもnull確認なしで扱えます。
+      </p>
+
+      <h3>Models/TaskItem.cs</h3>
+      <pre><code>public int? CategoryId { get; set; }
+public TaskCategory? Category { get; set; }</code></pre>
+      <p>
+        <code>CategoryId</code>はdatabaseへ保存されるforeign keyです。<code>Category</code>はobject graph上で関連entityを
+        たどるnavigationであり、同じ情報の役割が異なります。どちらもnullableなので、このtaskはcategoryなしでも存在できます。
+      </p>
+
+      <h3>Data/TaskDbContext.cs</h3>
+      <pre><code>public sealed class TaskDbContext(DbContextOptions&lt;TaskDbContext&gt; options)
+    : DbContext(options)
+{
+    public DbSet&lt;TaskItem&gt; Tasks =&gt; Set&lt;TaskItem&gt;();
+    public DbSet&lt;TaskCategory&gt; Categories =&gt; Set&lt;TaskCategory&gt;();
+}</code></pre>
+      <p>
+        primary constructorで受け取った<code>DbContextOptions</code>をbase classへ渡します。optionsにはSQLite providerや
+        connection stringが入ります。<code>DbSet</code>はentity集合へのqueryと追加・削除の入口です。property名は将来の
+        table名にも使われます。
+      </p>
+      <pre><code>entity.HasOne(task =&gt; task.Category)
+    .WithMany(category =&gt; category.Tasks)
+    .HasForeignKey(task =&gt; task.CategoryId)
+    .OnDelete(DeleteBehavior.SetNull);</code></pre>
+      <p>
+        <code>HasOne</code>はtask側のreference navigation、<code>WithMany</code>はcategory側のcollection navigation、
+        <code>HasForeignKey</code>はdatabase上の結合に使うpropertyを指定します。categoryを削除した場合はtask自体を削除せず、
+        nullableな<code>CategoryId</code>をnullにする方針です。
+      </p>
+
+      <h3>Program.cs</h3>
+      <pre><code>builder.Services.AddDbContext&lt;TaskDbContext&gt;(options =&gt;
+    options.UseSqlite(connectionString));</code></pre>
+      <p>
+        <code>AddDbContext</code>はcontextをDIへ登録し、既定でscoped lifetimeにします。HTTP request内では同じcontextを共有し、
+        request終了時にDI containerがDisposeします。<code>UseSqlite</code>はEF Coreのrelational providerとしてSQLiteを選びます。
+      </p>
+    </section>
+
+    <section aria-labelledby="verification">
+      <h2 id="verification">確認方法と観察結果</h2>
+      <pre><code>cd 04-data-and-testing
+dotnet tool restore
+dotnet restore TaskApi/TaskApi.csproj
+dotnet format TaskApi/TaskApi.csproj --verify-no-changes
+dotnet build TaskApi/TaskApi.csproj
+dotnet tool run dotnet-ef dbcontext info --project TaskApi/TaskApi.csproj</code></pre>
+      <p>
+        formatterとbuildでC#コードとpackage参照を確認します。<code>dbcontext info</code>はapplicationのdesign-time構成を使って
+        <code>TaskDbContext</code>を生成できること、SQLite providerとconnection stringを認識できることを確認します。
+        database fileやtableはまだ作りません。
+      </p>
+      <p id="observed-result">
+        <code>dbcontext info</code>は<code>TaskApi.Data.TaskDbContext</code>を生成し、providerを
+        <code>Microsoft.EntityFrameworkCore.Sqlite</code>、database名を<code>main</code>、data sourceを
+        <code>tasks.db</code>として認識しました。formatterとbuildは成功し、buildのwarningとerrorはいずれも0件でした。
+        <code>nix flake check</code>も成功し、NuGet監査では現在のsource上で脆弱なpackageは検出されませんでした。
+        migrationとdatabase fileはまだ作成していません。
+      </p>
+    </section>
+
+    <section aria-labelledby="review">
+      <h2 id="review">コードリーディング課題</h2>
+      <ol>
+        <li><code>TaskCategory</code>と<code>TaskItem</code>のどちらがprincipal、dependentですか。その根拠となるforeign keyも答えてください。</li>
+        <li><code>CategoryId</code>と<code>Category</code>をnullableにしたことで、relationはどのような意味になりますか。</li>
+        <li><code>AddDbContext</code>で登録した<code>TaskDbContext</code>をendpoint側が自分でDisposeしないのはなぜですか。</li>
+      </ol>
+      <p>modelのrelation、nullability、DbContextの所有者をコードから説明できれば完了です。</p>
+    </section>
+  </main>
+</body>
+</html>

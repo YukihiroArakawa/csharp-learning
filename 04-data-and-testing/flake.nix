@@ -12,6 +12,7 @@
       in {
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [ dotnet-sdk_10 csharp-ls netcoredbg sqlite ];
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.sqlite ];
         };
       });
 }
