@@ -199,7 +199,7 @@ dotnet format TypeSystemSamples/TypeSystemSamples.csproj
 ### 4. EF Core とテスト
 
 - [x] `DbContext`、entity、relation を定義する。
-- [ ] migration を作成し、DB に適用する。
+- [x] migration を作成し、DB に適用する。
 - [ ] LINQ クエリが SQL に翻訳される箇所を確認する。
 - [x] `DbContext` を scoped として扱う理由を説明できる。
 - [ ] サービス層の単体テストを 1 本以上書く。

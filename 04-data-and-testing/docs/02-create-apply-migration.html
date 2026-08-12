@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EF Core migrationを作成してSQLiteへ適用する</title>
+  <link rel="stylesheet" href="task.css">
+</head>
+<body>
+  <main>
+    <h1>EF Core migrationを作成してSQLiteへ適用する</h1>
+
+    <section aria-labelledby="overview">
+      <h2 id="overview">今回の課題</h2>
+      <ul>
+        <li>目安時間：30〜40分</li>
+        <li>前提：<code>DbContext</code>、entity、primary key、foreign keyを説明できる</li>
+        <li>目的：C#のEF model変更を、review可能なschema変更として生成・適用する流れを理解する</li>
+      </ul>
+      <p>
+        Codexが現在の<code>TaskDbContext</code>から初回migrationを生成し、SQLite databaseへ適用します。
+        学習者は生成された<code>Up</code>、<code>Down</code>、model snapshotと、実際に作成されたtableを読みます。
+        migration commandを暗記することよりも、どのfileが変更計画で、どのfileが現在modelの基準で、
+        databaseが適用済みかを何で判定するのかを理解することが目的です。
+      </p>
+    </section>
+
+    <section aria-labelledby="migration-concept">
+      <h2 id="migration-concept">migrationはdatabase schemaのversion管理</h2>
+      <p>
+        EF CoreのmodelはC# classと<code>OnModelCreating</code>から組み立てられますが、modelを変更しただけでは既存databaseの
+        tableは自動的に変わりません。稼働済みdatabaseにはdataがあり、column追加、foreign key変更、table削除などを
+        順序立てて適用する必要があります。
+      </p>
+      <p>
+        migrationは「以前のmodelから現在のmodelへdatabase schemaをどう変更するか」をC# codeとして記録します。
+        source controlへcommitできるため、変更内容をreviewし、環境ごとに同じ順序で適用できます。
+        migration fileはdatabaseそのものではなく、databaseを更新するためのversion付き手順です。
+      </p>
+      <figure aria-labelledby="migration-flow-caption">
+        <div class="diagram-root">
+          <div class="diagram-title">model・migration・databaseの関係</div>
+          <div class="diagram-flow">
+            <div class="diagram-node">現在のEF model<br>entity・relation・制約</div>
+            <div class="diagram-node">migration生成<br>前回snapshotとの差分</div>
+            <div class="diagram-node">migration code<br>Up / Down</div>
+            <div class="diagram-node">database update<br>未適用分を順番に実行</div>
+            <div class="diagram-node">SQLite schema<br>table・FK・index</div>
+          </div>
+        </div>
+        <figcaption id="migration-flow-caption">
+          migration生成は変更計画を作る処理、database updateはその計画を実DBへ実行する処理である。
+        </figcaption>
+      </figure>
+    </section>
+
+    <section aria-labelledby="generate-apply">
+      <h2 id="generate-apply">生成と適用は別の操作</h2>
+      <pre><code>dotnet tool run dotnet-ef migrations add InitialCreate \
+  --project TaskApi/TaskApi.csproj \
+  --output-dir Data/Migrations</code></pre>
+      <p>
+        <code>migrations add</code>は<code>TaskDbContext</code>の現在modelを読み、前回snapshotと比較してmigration sourceを生成します。
+        初回なので比較対象となるtableはなく、<code>Categories</code>と<code>Tasks</code>を新規作成するcodeになりました。
+        この時点ではdatabaseへschema変更を適用していません。
+      </p>
+      <pre><code>dotnet tool run dotnet-ef database update \
+  --project TaskApi/TaskApi.csproj</code></pre>
+      <p>
+        <code>database update</code>はconnection stringが示すdatabaseを開き、migration履歴tableを確認します。
+        未適用のmigrationだけを順番に実行し、成功後にmigration IDを<code>__EFMigrationsHistory</code>へ記録します。
+        同じcommandを再実行しても、履歴に記録済みのmigrationは再適用されません。
+      </p>
+    </section>
+
+    <section aria-labelledby="generated-files">
+      <h2 id="generated-files">三つの生成fileをどう読むか</h2>
+      <h3>20260812020906_InitialCreate.cs</h3>
+      <p>
+        人間が最初にreviewする変更手順です。<code>Up</code>は新しいversionへ進める操作、<code>Down</code>はこのmigrationを
+        戻す操作を表します。自動生成だから無条件に信用するのではなく、意図しないcolumn削除やdata lossがないかを確認します。
+      </p>
+      <pre><code>protected override void Up(MigrationBuilder migrationBuilder)
+{
+    migrationBuilder.CreateTable(name: "Categories", /* ... */);
+    migrationBuilder.CreateTable(name: "Tasks", /* ... */);
+    migrationBuilder.CreateIndex(
+        name: "IX_Tasks_CategoryId",
+        table: "Tasks",
+        column: "CategoryId");
+}</code></pre>
+      <p>
+        table作成順はrelationに依存します。principalの<code>Categories</code>を先に作り、その後でforeign keyを持つdependentの
+        <code>Tasks</code>を作ります。<code>CategoryId</code>検索やjoinに使えるindexも生成されています。
+      </p>
+
+      <h3>20260812020906_InitialCreate.Designer.cs</h3>
+      <p>
+        このmigrationを生成した時点のmodel metadataです。migration固有の情報としてEF Coreが利用します。
+        通常は手で編集せず、main migration fileと組にしてcommitします。
+      </p>
+
+      <h3>TaskDbContextModelSnapshot.cs</h3>
+      <p>
+        最新migration適用後にEF Coreが期待するmodelのsnapshotです。次に<code>migrations add</code>を実行すると、
+        EF Coreはこのsnapshotと新しい<code>TaskDbContext</code> modelを比較して差分を生成します。
+        databaseを直接読み取って差分を作るのではない点が重要です。
+      </p>
+    </section>
+
+    <section aria-labelledby="schema">
+      <h2 id="schema">C# modelがSQLite schemaへ変換された結果</h2>
+      <pre><code>CREATE TABLE "Tasks" (
+    "Id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "Title" TEXT NOT NULL,
+    "IsCompleted" INTEGER NOT NULL,
+    "CategoryId" INTEGER NULL,
+    FOREIGN KEY ("CategoryId")
+      REFERENCES "Categories" ("Id") ON DELETE SET NULL
+);
+
+CREATE INDEX "IX_Tasks_CategoryId"
+ON "Tasks" ("CategoryId");</code></pre>
+      <p>
+        <code>CategoryId</code>はC#で<code>int?</code>なのでSQLiteでもNULLを許します。
+        <code>OnDelete(DeleteBehavior.SetNull)</code>は<code>ON DELETE SET NULL</code>になり、category削除時にtaskを残す方針が
+        database constraintにも反映されています。<code>bool</code>の<code>IsCompleted</code>はSQLite providerによってINTEGERへ変換されます。
+      </p>
+      <p>
+        <code>Title</code>の最大100文字や<code>Name</code>の最大50文字はmigration metadataには記録されています。
+        ただしSQLiteのTEXT型は長さをdatabase constraintとして強制しないため、providerごとのschema表現差も意識する必要があります。
+      </p>
+    </section>
+
+    <section aria-labelledby="history">
+      <h2 id="history">__EFMigrationsHistoryが適用済みversionを示す</h2>
+      <pre><code>SELECT MigrationId, ProductVersion
+FROM __EFMigrationsHistory;</code></pre>
+      <pre><code>20260812020906_InitialCreate|10.0.10</code></pre>
+      <p>
+        EF Coreはこの履歴を見て未適用migrationを判断します。migration sourceがGitに存在することだけでは、ある環境のdatabaseへ
+        適用済みとは証明できません。source control上のmigration一覧と、各databaseの履歴tableは別の状態です。
+      </p>
+    </section>
+
+    <section aria-labelledby="java">
+      <h2 id="java">JPA / Hibernateとschema migrationの違い</h2>
+      <p>
+        JPA entityとHibernateのschema自動更新だけに任せるより、FlywayやLiquibaseでversion付きSQLを管理する考え方に近いです。
+        EF Core migrationsはORM modelから変更手順を生成できる点が統合されていますが、生成物をreviewして順番に適用する責任は同じです。
+      </p>
+      <table>
+        <thead><tr><th>Java ecosystem</th><th>EF Core</th></tr></thead>
+        <tbody>
+          <tr><td>JPA entity / Hibernate metadata</td><td>entity / <code>DbContext</code> model</td></tr>
+          <tr><td>Flyway・Liquibase migration</td><td>EF Core migration</td></tr>
+          <tr><td>schema history table</td><td><code>__EFMigrationsHistory</code></td></tr>
+          <tr><td>version付きSQL</td><td>version付き<code>Migration</code> C# class</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="files">
+      <h2 id="files">変更対象ファイル</h2>
+      <table>
+        <thead><tr><th>パス</th><th>変更内容</th></tr></thead>
+        <tbody>
+          <tr><td><code>.gitignore</code></td><td>再生成可能なlocal SQLite database fileをGit管理対象外に追加</td></tr>
+          <tr><td><code>04-data-and-testing/TaskApi/Data/Migrations/20260812020906_InitialCreate.cs</code></td><td>初回schemaのUp・Down操作を生成</td></tr>
+          <tr><td><code>04-data-and-testing/TaskApi/Data/Migrations/20260812020906_InitialCreate.Designer.cs</code></td><td>migration生成時点のmodel metadataを生成</td></tr>
+          <tr><td><code>04-data-and-testing/TaskApi/Data/Migrations/TaskDbContextModelSnapshot.cs</code></td><td>次回差分生成の基準となる最新model snapshotを生成</td></tr>
+          <tr><td><code>04-data-and-testing/docs/02-create-apply-migration.html</code></td><td>migrationの概念、生成物、schema、履歴、理解確認を記録</td></tr>
+        </tbody>
+      </table>
+      <p>
+        <code>04-data-and-testing/TaskApi/tasks.db</code>は動作確認で生成されますが、local artifactなのでcommitしません。
+        必要な環境ではmigrationから再作成します。
+      </p>
+    </section>
+
+    <section aria-labelledby="verification">
+      <h2 id="verification">確認commandと観察結果</h2>
+      <pre><code>cd 04-data-and-testing
+nix develop --command dotnet tool run dotnet-ef database update \
+  --project TaskApi/TaskApi.csproj
+nix develop --command sqlite3 TaskApi/tasks.db '.schema'
+nix develop --command sqlite3 TaskApi/tasks.db \
+  'SELECT MigrationId, ProductVersion FROM __EFMigrationsHistory;'
+dotnet format TaskApi/TaskApi.csproj --verify-no-changes
+dotnet build TaskApi/TaskApi.csproj</code></pre>
+      <p>
+        <code>database update</code>は<code>InitialCreate</code>を適用しました。実DBには<code>Categories</code>、<code>Tasks</code>、
+        <code>IX_Tasks_CategoryId</code>、<code>__EFMigrationsHistory</code>が存在します。履歴にはmigration IDとEF Core
+        version <code>10.0.10</code>が1件記録されました。同じ<code>database update</code>を再実行すると
+        <code>No migrations were applied. The database is already up to date.</code>となり、適用済みmigrationが再実行されないことも確認しました。
+        formatterとbuildは成功し、buildのwarningとerrorはいずれも0件でした。
+      </p>
+    </section>
+
+    <section aria-labelledby="review">
+      <h2 id="review">コードリーディング課題</h2>
+      <ol>
+        <li><code>migrations add</code>と<code>database update</code>は、それぞれ何を変更しますか。</li>
+        <li><code>TaskDbContextModelSnapshot</code>は、次回migration生成時に何と何を比較するために使われますか。</li>
+        <li><code>CategoryId</code>がNULL可能で、category削除時にNULLへ変わることは、migrationのどの記述に現れていますか。</li>
+      </ol>
+      <p>生成と適用を区別し、model設定とschema変更codeを対応付けられれば完了です。</p>
+    </section>
+  </main>
+</body>
+</html>
