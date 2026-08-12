@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Controller APIを読み、Minimal APIと使い分ける</title>
+  <link rel="stylesheet" href="task.css">
+</head>
+<body>
+  <main>
+    <h1>Controller APIを読み、Minimal APIと使い分ける</h1>
+
+    <section aria-labelledby="overview">
+      <h2 id="overview">今回の課題</h2>
+      <ul>
+        <li>目安時間：35〜45分</li>
+        <li>前提：Minimal APIのroute、binding、validation、responseを読める</li>
+        <li>目的：同じHTTP APIがController形式ではどこに記述されるかを追い、採用判断を説明できる</li>
+      </ul>
+      <p>
+        CodexがGET、ID指定GET、POSTを持つ<code>ControllerApiSample</code>を実装します。学習者は、起動時の登録、
+        classとmethodに付いたattribute、action methodの引数と戻り値を実行順に読みます。
+        Controllerの構文を暗記するのではなく、Minimal APIで既に理解したroute、binding、validation、responseとの対応を探します。
+      </p>
+    </section>
+
+    <section aria-labelledby="concept">
+      <h2 id="concept">Controller形式とは何か</h2>
+      <p>
+        Minimal APIでは<code>Program.cs</code>の<code>MapGet</code>や<code>MapPost</code>が、routeとhandlerを直接結び付けます。
+        Controller形式では、<code>ControllerBase</code>を継承したclassのpublic methodをactionとして使い、attributeで
+        HTTP method、route、binding元、response metadataを宣言します。
+      </p>
+      <p>
+        requestが来るたびにASP.NET Coreが対象ControllerをDIから生成し、routeに一致するactionを呼びます。
+        Controller classそのものがserverを起動するわけではありません。<code>AddControllers</code>がMVCのserviceを準備し、
+        <code>MapControllers</code>がattributeからendpointを作ることでpipelineへ参加します。
+      </p>
+      <figure aria-labelledby="controller-flow-caption">
+        <div class="diagram-root">
+          <div class="diagram-title">Controller形式でrequestがactionへ届くまで</div>
+          <div class="diagram-flow">
+            <div class="diagram-node">HTTP request<br>POST /controller/tasks</div>
+            <div class="diagram-node">Endpoint routing<br>attribute metadataを照合</div>
+            <div class="diagram-node">Model binding / validation<br>引数を構築・検証</div>
+            <div class="diagram-node">TasksController.Create<br>actionを実行</div>
+            <div class="diagram-node">ActionResult<br>HTTP responseへ変換</div>
+          </div>
+        </div>
+        <figcaption id="controller-flow-caption">
+          classとmethodのattributeが集められ、routing・binding・validation・response変換をframeworkがactionの外側で行う。
+        </figcaption>
+      </figure>
+    </section>
+
+    <section aria-labelledby="registration">
+      <h2 id="registration">起動時の準備とruntimeの公開</h2>
+      <pre><code>var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddControllers();
+
+var app = builder.Build();
+
+app.MapControllers();</code></pre>
+      <p>
+        <code>AddControllers</code>はController discovery、model binding、validation、formatterなどのMVC serviceをDIへ登録します。
+        これは起動時の準備です。<code>MapControllers</code>は発見したControllerのattribute routeをendpointとして公開します。
+        前に学んだ<code>AddOpenApi</code>と<code>MapOpenApi</code>と同様に、serviceの準備とendpointの公開は別の段階です。
+      </p>
+    </section>
+
+    <section aria-labelledby="attributes">
+      <h2 id="attributes">attributeを上から読む</h2>
+      <pre><code>[ApiController]
+[Route("controller/tasks")]
+public sealed class TasksController : ControllerBase</code></pre>
+      <p>
+        C#の<code>[...]</code>はattributeです。classやmethodなどへmetadataを付け、frameworkがreflectionなどを通じて読み取ります。
+        Java annotationに近い構文です。<code>ApiController</code>はこのclassをHTTP API向けControllerとして扱い、binding元の推論や
+        model validation失敗時の自動400 responseなどを有効にします。
+      </p>
+      <p>
+        <code>Route("controller/tasks")</code>はclass内の全actionに共通するroute prefixです。
+        <code>ControllerBase</code>はviewを描画しないAPI Controller向けbase classで、<code>Ok</code>、<code>NotFound</code>、
+        <code>CreatedAtRoute</code>などのresponse helperを提供します。
+      </p>
+      <pre><code>[HttpGet("{id:int}", Name = nameof(GetById))]
+public ActionResult&lt;TaskItem&gt; GetById(int id)</code></pre>
+      <p>
+        class側routeとmethod側routeを結合して、<code>GET /controller/tasks/{id:int}</code>になります。
+        routeにある<code>id</code>と同名の単純型引数へ値がbindingされます。<code>ActionResult&lt;TaskItem&gt;</code>は、成功時の
+        <code>TaskItem</code>だけでなく、<code>NotFound()</code>など別statusのaction resultも返せる型です。
+      </p>
+    </section>
+
+    <section aria-labelledby="validation">
+      <h2 id="validation">[ApiController]によるvalidationの位置</h2>
+      <pre><code>public sealed record CreateTaskRequest(
+    [Required, StringLength(100)] string Title);</code></pre>
+      <p>
+        primary constructorの<code>Title</code> parameterに、Data Annotationsのvalidation attributeを付けています。
+        <code>Required</code>はnullを拒否し、<code>StringLength(100)</code>は最大100文字に制限します。
+        Controllerがrecordを検証するときはconstructor parameterのmetadataを読みます。生成されるpropertyへ
+        <code>property:</code>でattributeを付けるとvalidation metadataとして使われないため、parameterへ直接付けます。
+      </p>
+      <pre><code>[HttpPost]
+public ActionResult&lt;TaskItem&gt; Create([FromBody] CreateTaskRequest request)
+{
+    // validation成功時だけ実行される
+}</code></pre>
+      <p>
+        <code>FromBody</code>はJSON request bodyから引数を構築することを明示します。binding後、<code>ApiController</code>がvalidationを実行し、
+        不正ならactionを呼ばずに400 Validation Problem Detailsを返します。そのため、今回のaction内には
+        <code>if (!ModelState.IsValid)</code>を書いていません。
+      </p>
+      <p>
+        Data Annotationsだけでは空白文字だけのtitleを業務上無効とする判断までは表現していません。
+        Controller形式でも、型としてbindingできることと業務上有効であることは別であり、必要ならcustom validationやservice層で補います。
+      </p>
+    </section>
+
+    <section aria-labelledby="created">
+      <h2 id="created">CreatedAtRouteがLocationを組み立てる</h2>
+      <pre><code>return CreatedAtRoute(
+    nameof(GetById),
+    new { id = task.Id },
+    task);</code></pre>
+      <p>
+        POST成功時は201 Createdを返し、名前を付けた<code>GetById</code> routeと新しいIDから<code>Location</code> headerを生成します。
+        第一引数はroute名、第二引数のanonymous objectはroute parameter、第三引数はresponse bodyです。
+        URL文字列を直接組み立てないため、route template変更時の追従箇所を減らせます。
+      </p>
+    </section>
+
+    <section aria-labelledby="comparison">
+      <h2 id="comparison">Minimal APIとの対応</h2>
+      <table>
+        <thead><tr><th>関心事</th><th>Minimal API</th><th>Controller API</th></tr></thead>
+        <tbody>
+          <tr><td>service準備</td><td>通常は追加不要</td><td><code>AddControllers</code></td></tr>
+          <tr><td>endpoint公開</td><td><code>MapGet</code> / <code>MapPost</code></td><td><code>MapControllers</code> + attribute</td></tr>
+          <tr><td>route</td><td><code>MapGet("/tasks/{id:int}", ...)</code></td><td><code>[Route]</code> + <code>[HttpGet]</code></td></tr>
+          <tr><td>handler</td><td>delegate / method</td><td>Controllerのaction method</td></tr>
+          <tr><td>response</td><td><code>Results.Ok</code>など</td><td><code>Ok</code>などのController helper</td></tr>
+          <tr><td>metadata</td><td><code>Produces</code>などのmethod chain</td><td><code>ProducesResponseType</code> attribute</td></tr>
+        </tbody>
+      </table>
+      <p>
+        両形式とも同じrouting、middleware、DI、認証認可などASP.NET Core基盤の上で動きます。
+        Controllerだけが「本格的なAPI」でMinimal APIが試作用、という区別ではありません。
+      </p>
+    </section>
+
+    <section aria-labelledby="choice">
+      <h2 id="choice">どう使い分けるか</h2>
+      <p>
+        .NET 10の公式方針では、新規HTTP APIはまずMinimal APIが推奨されています。記述量が少なく、routeと処理の対応を近くに置け、
+        認証認可やOpenAPIなど通常のAPI機能にも対応するためです。小規模service、機能単位で整理されたendpoint、
+        既にMinimal APIを採用しているprojectでは自然な選択です。
+      </p>
+      <p>
+        Controller形式は、既存projectがMVC規約で統一されている場合、<code>IModelBinderProvider</code>によるbinding拡張、
+        <code>IModelValidator</code>による高度なvalidation、application model、application parts、ODataなどController/MVC固有機能が
+        必要な場合に選びます。class・attribute中心の構造をteam規約として重視する場合にも候補になります。
+      </p>
+      <p>
+        endpoint数が多いという理由だけでControllerへ変える必要はありません。Minimal APIもroute groupや別method・別fileへ分割できます。
+        逆に、既存Controller projectを「新しい形式だから」という理由だけでMinimal APIへ全面移行する必要もありません。
+        現場では既存規約と必要なframework機能を確認して選びます。
+      </p>
+    </section>
+
+    <section aria-labelledby="spring">
+      <h2 id="spring">Spring Bootとの比較</h2>
+      <p>
+        Controller形式はSpring MVCの<code>@RestController</code>にかなり近い読み方ができます。
+        class-level routeとmethod-level routeを結合し、method parameterへrequest値をbindingし、戻り値をHTTP responseへ変換します。
+      </p>
+      <table>
+        <thead><tr><th>Spring MVC</th><th>ASP.NET Core Controller</th></tr></thead>
+        <tbody>
+          <tr><td><code>@RestController</code></td><td><code>[ApiController]</code> + <code>ControllerBase</code></td></tr>
+          <tr><td><code>@RequestMapping</code></td><td><code>[Route]</code></td></tr>
+          <tr><td><code>@GetMapping</code></td><td><code>[HttpGet]</code></td></tr>
+          <tr><td><code>@RequestBody</code></td><td><code>[FromBody]</code></td></tr>
+          <tr><td><code>ResponseEntity&lt;T&gt;</code></td><td><code>ActionResult&lt;T&gt;</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="files">
+      <h2 id="files">変更対象ファイル</h2>
+      <table>
+        <thead><tr><th>パス</th><th>変更内容</th></tr></thead>
+        <tbody>
+          <tr><td><code>03-aspnet-core/ControllerApiSample/ControllerApiSample.csproj</code></td><td>.NET 10 Web projectを定義</td></tr>
+          <tr><td><code>03-aspnet-core/ControllerApiSample/Program.cs</code></td><td>Controller serviceとendpointを登録</td></tr>
+          <tr><td><code>03-aspnet-core/ControllerApiSample/Controllers/TasksController.cs</code></td><td>GET、ID指定GET、POST actionを実装</td></tr>
+          <tr><td><code>03-aspnet-core/ControllerApiSample/Models/TaskItem.cs</code></td><td>response modelを定義</td></tr>
+          <tr><td><code>03-aspnet-core/ControllerApiSample/Models/CreateTaskRequest.cs</code></td><td>request modelとvalidation attributeを定義</td></tr>
+          <tr><td><code>03-aspnet-core/ControllerApiSample/ControllerApiSample.http</code></td><td>正常GET・POSTとvalidation失敗requestを追加</td></tr>
+          <tr><td><code>03-aspnet-core/ControllerApiSample/Properties/launchSettings.json</code></td><td>検証用URLとDevelopment環境を定義</td></tr>
+          <tr><td><code>03-aspnet-core/docs/08-controller-api-comparison.html</code></td><td>Controllerの読み方、比較、実測結果、読解課題を記録</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="verification">
+      <h2 id="verification">確認方法と観察対象</h2>
+      <pre><code>cd 03-aspnet-core
+dotnet format ControllerApiSample/ControllerApiSample.csproj --verify-no-changes
+dotnet build ControllerApiSample/ControllerApiSample.csproj
+dotnet run --no-build --project ControllerApiSample/ControllerApiSample.csproj</code></pre>
+      <p>
+        <code>ControllerApiSample.http</code>または<code>curl</code>で、一覧GET、ID指定GET、正常POST、titleがnullのPOSTを送ります。
+        正常POSTでは201と<code>Location</code>、validation失敗ではaction内に分岐を書かなくても400 Problem Detailsになることを確認します。
+      </p>
+      <p id="observed-result">
+        一覧GETは200と絞り込まれたJSON配列を返しました。正常POSTは201、作成した<code>TaskItem</code>、
+        <code>Location: http://localhost:5174/controller/tasks/3</code>を返しました。titleがnullのPOSTでは
+        <code>Create</code> actionの本体へ入らず、400と<code>application/problem+json</code>、
+        <code>Title field is required</code>というvalidation errorが返りました。
+        formatterとbuildは成功し、buildのwarningとerrorはいずれも0件でした。検証用APIも停止済みです。
+      </p>
+    </section>
+
+    <section aria-labelledby="review">
+      <h2 id="review">コードリーディング課題</h2>
+      <ol>
+        <li><code>AddControllers</code>と<code>MapControllers</code>は、それぞれ準備と公開のどちらですか。</li>
+        <li>titleがnullのPOSTで<code>Create</code> actionを実行せず400を返せるのは、どのattributeとvalidation metadataがあるためですか。</li>
+        <li>新規の単純なHTTP APIと、MVC固有の高度なmodel binding拡張が必要なAPIでは、それぞれどちらの形式を第一候補にしますか。</li>
+      </ol>
+      <p>Controllerコードをrequestの入口からresponseまで追い、使い分けの理由を説明できれば完了です。</p>
+    </section>
+  </main>
+</body>
+</html>

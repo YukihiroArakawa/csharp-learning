@@ -1,0 +1,27 @@
+@host = http://localhost:5174
+
+GET {{host}}/controller/tasks?completed=false
+Accept: application/json
+
+###
+
+GET {{host}}/controller/tasks/1
+Accept: application/json
+
+###
+
+POST {{host}}/controller/tasks
+Content-Type: application/json
+
+{
+  "title": "Controllerからtaskを登録する"
+}
+
+###
+
+POST {{host}}/controller/tasks
+Content-Type: application/json
+
+{
+  "title": null
+}
