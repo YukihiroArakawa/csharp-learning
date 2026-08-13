@@ -208,10 +208,20 @@ dotnet format TypeSystemSamples/TypeSystemSamples.csproj
 
 ### 5. 最終課題と現場適応
 
-- [ ] タスク管理 API の CRUD とページングを実装する。
-- [ ] 永続化、migration、入力検証、統一エラー応答を追加する。
-- [ ] 設定、Options、構造化ログ、キャンセル伝播を組み込む。
-- [ ] 単体テストと統合テストを追加する。
+- [x] task 一覧のページングと query parameter 検証を実装する。
+- [x] ページング API の統合テストを追加する。
+- [ ] EF Core による永続化と initial migration を追加する。
+- [ ] task を ID で取得する endpoint を実装する。
+- [ ] task を作成する endpoint と入力検証を実装する。
+- [ ] task を更新する endpoint と入力検証を実装する。
+- [ ] task を削除する endpoint を実装する。
+- [ ] 例外応答を Problem Details 形式へ統一する。
+- [ ] Options パターンで設定値を検証する。
+- [ ] task 操作を構造化ログへ記録する。
+- [ ] CancellationToken を DB / I/O 処理まで伝播する。
+- [ ] サービス層の単体テストを追加する。
+- [ ] CRUD API の統合テストを追加する。
+- [ ] `dotnet test` ですべて成功する状態にする。
 - [ ] README に起動方法、必要な設定値、設計上の判断を書く。
 - [ ] 現場の `TargetFramework`、Web API の形式、ORM、認証、テスト、CI/CD の構成を確認する。
 - [ ] 現場の 1 リクエストを入口から DB・ログ・テストまで追跡する。

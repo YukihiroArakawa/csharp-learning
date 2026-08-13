@@ -51,7 +51,8 @@ description: Guide AI-assisted C# and .NET learning in this repository for a Jav
 2. Walk through the changed files in dependency or execution order. Explain why the code has this shape and how it differs from the Java/Spring equivalent.
 3. Give the learner a small review assignment: predict output, trace one path, explain a lifetime or framework convention, or identify a plausible failure caused by a wrong choice.
 4. When the learner responds, explain the review result first. State explicitly whether the learning item is complete and identify any unmet understanding or verification condition.
-5. Update the corresponding README TODO only after the code is verified and the learner demonstrates the intended understanding.
-6. Before committing C# changes, run `dotnet format --verify-no-changes` for the affected project. If it fails, format and verify again.
-7. Commit the implementation, exercise document, and README update together with an appropriate Conventional Commit. Exclude unrelated changes.
-8. On milestone deadlines, record completed, incomplete, and deferred work in README. Do not move deadlines; defer lower-priority work instead.
+5. Keep each README checklist item small enough to match one exercise-and-review rally. Before starting an exercise, split a broader incomplete item into independently verifiable outcomes without marking unfinished work complete.
+6. Update the corresponding README TODO only after the code is verified and the learner demonstrates the intended understanding.
+7. Before committing C# changes, run `dotnet format --verify-no-changes` for the affected project. If it fails, format and verify again.
+8. Commit the implementation, exercise document, answer sheet, and README update together with an appropriate Conventional Commit. Exclude unrelated changes.
+9. On milestone deadlines, record completed, incomplete, and deferred work in README. Do not move deadlines; defer lower-priority work instead.
