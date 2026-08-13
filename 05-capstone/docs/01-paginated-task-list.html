@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ページングされたtask一覧を読む</title>
+  <link rel="stylesheet" href="task.css">
+</head>
+<body>
+  <main>
+    <h1>ページングされたtask一覧を読む</h1>
+
+    <section aria-labelledby="overview">
+      <h2 id="overview">今回の課題</h2>
+      <ul>
+        <li>目安時間：35〜45分</li>
+        <li>前提：Minimal APIのquery parameter bindingとHTTP status codeを説明できる</li>
+        <li>目的：page number方式のAPI契約、入力検証、切り出し計算、metadataの役割をコードから説明できる</li>
+      </ul>
+      <p>
+        最終課題の最初の縦切りとして、Codexが<code>GET /tasks</code>へページングを実装しました。現在は固定dataを使い、HTTP契約と
+        ページング計算を先に確定しています。次の課題でdata sourceをEF Coreへ置き換えても、clientから見えるquery parameterとresponseの形は
+        変えません。学習者は実装と統合テストを読み、どの入力からどの範囲が返るかを説明します。
+      </p>
+    </section>
+
+    <section aria-labelledby="purpose">
+      <h2 id="purpose">ページングが解決する問題</h2>
+      <p>
+        一覧endpointが全件を返すと、data増加に比例してdatabaseの読み取り量、application memory、JSON size、network転送量が増えます。
+        clientが画面に20件しか表示しない場合でも、残りを取得する費用が発生します。ページングは一度に返す件数を制限し、clientが必要な範囲を
+        明示して取得できるようにします。
+      </p>
+      <p>
+        今回は1から始まる<code>page</code>と、1ページの件数を表す<code>pageSize</code>を採用します。指定がなければpage 1、20件です。
+        <code>pageSize</code>の上限を100にすることで、clientが極端に大きな値を指定して実質的な全件取得に戻すことを防ぎます。
+      </p>
+      <table>
+        <thead><tr><th>request</th><th>意味</th><th>返るID</th></tr></thead>
+        <tbody>
+          <tr><td><code>?page=1&amp;pageSize=2</code></td><td>先頭から2件</td><td>1, 2</td></tr>
+          <tr><td><code>?page=2&amp;pageSize=2</code></td><td>先頭2件を飛ばして次の2件</td><td>3, 4</td></tr>
+          <tr><td><code>?page=4&amp;pageSize=2</code></td><td>存在する5件より後</td><td>空のitems</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="contract">
+      <h2 id="contract">itemsだけでなくmetadataも返す</h2>
+      <p>
+        responseはtask配列だけではなく、<code>items</code>、<code>page</code>、<code>pageSize</code>、<code>totalCount</code>を返します。
+        clientは<code>totalCount</code>と<code>pageSize</code>から全ページ数を計算でき、現在のpage表示や「次へ」buttonの有効・無効を判断できます。
+        requestされたpageが最終pageより後でも、request形式自体は正しいため404にはせず、metadataを保った空の<code>items</code>を200で返します。
+      </p>
+      <pre><code>{
+  "items": [
+    { "id": 3, "title": "テストを書く", "isCompleted": false },
+    { "id": 4, "title": "READMEを更新する", "isCompleted": false }
+  ],
+  "page": 2,
+  "pageSize": 2,
+  "totalCount": 5
+}</code></pre>
+    </section>
+
+    <section aria-labelledby="syntax">
+      <h2 id="syntax">今回読むC#の形</h2>
+      <h3>default parameter</h3>
+      <pre><code>IResult (int page = 1, int pageSize = 20) =&gt;</code></pre>
+      <p>
+        <code>= 1</code>と<code>= 20</code>はargumentが省略された場合のdefault valueです。ASP.NET Coreはquery stringに値があればintへ変換し、
+        なければdefaultを使います。Javaのmethod parameterには同じdefault argument構文がないため、Springではrequest parameter annotationの
+        default設定やmethod内の補完で表すことが一般的です。
+      </p>
+
+      <h3>list pattern風のcollection expression</h3>
+      <pre><code>errors[nameof(page)] = ["pageは1以上を指定してください。"];</code></pre>
+      <p>
+        右辺の角括弧は、要素を一つ持つ<code>string[]</code>を作るcollection expressionです。左辺の期待typeが<code>string[]</code>なのでcompilerが
+        配列typeを決定します。<code>nameof(page)</code>は文字列<code>"page"</code>をcompile時に得るため、parameter名をrenameした際も追従します。
+      </p>
+
+      <h3>generic record</h3>
+      <pre><code>public sealed record PagedResponse&lt;T&gt;(
+    IReadOnlyList&lt;T&gt; Items,
+    int Page,
+    int PageSize,
+    int TotalCount);</code></pre>
+      <p>
+        <code>T</code>に一覧要素のtypeを渡すことで、同じページング契約をtask以外にも再利用できます。今回は
+        <code>PagedResponse&lt;TaskSummary&gt;</code>となり、<code>Items</code>はtaskの読み取り専用listです。
+      </p>
+    </section>
+
+    <section aria-labelledby="files">
+      <h2 id="files">変更対象ファイル</h2>
+      <table>
+        <thead><tr><th>ファイル</th><th>変更内容</th></tr></thead>
+        <tbody>
+          <tr><td><code>05-capstone/TaskManagementApi/TaskManagementApi.csproj</code></td><td>ASP.NET Core web projectを新規作成</td></tr>
+          <tr><td><code>05-capstone/TaskManagementApi/Program.cs</code></td><td>固定taskとページングendpointを実装</td></tr>
+          <tr><td><code>05-capstone/TaskManagementApi/Models/TaskSummary.cs</code></td><td>一覧要素のresponse modelを追加</td></tr>
+          <tr><td><code>05-capstone/TaskManagementApi/Models/PagedResponse.cs</code></td><td>ページ情報を含むgeneric response modelを追加</td></tr>
+          <tr><td><code>05-capstone/TaskManagementApi/appsettings.json</code></td><td>標準logging設定を追加</td></tr>
+          <tr><td><code>05-capstone/TaskManagementApi.Tests/TaskManagementApi.Tests.csproj</code></td><td>xUnitとWebApplicationFactoryのtest projectを追加</td></tr>
+          <tr><td><code>05-capstone/TaskManagementApi.Tests/TaskPaginationTests.cs</code></td><td>ページング契約の統合テスト3件を追加</td></tr>
+          <tr><td><code>05-capstone/TaskManagementApi.slnx</code></td><td>productionとtest projectをまとめるsolutionを追加</td></tr>
+          <tr><td><code>05-capstone/flake.lock</code></td><td>capstone用Nix依存versionを固定</td></tr>
+          <tr><td><code>05-capstone/docs/task.css</code></td><td>capstone教材共通styleを追加</td></tr>
+          <tr><td><code>05-capstone/docs/01-paginated-task-list.html</code></td><td>この課題説明を追加</td></tr>
+          <tr><td><code>05-capstone/docs/01-paginated-task-list-answers.md</code></td><td>コードリーディング課題の回答欄を追加</td></tr>
+        </tbody>
+      </table>
+      <p>CRUD全体はまだ完成していないため、rootのREADMEの完了checkは変更しません。</p>
+    </section>
+
+    <section aria-labelledby="implementation">
+      <h2 id="implementation">実装コードを実行順に読む</h2>
+      <h3><code>05-capstone/TaskManagementApi/Program.cs</code></h3>
+      <pre><code>app.MapGet("/tasks", IResult (int page = 1, int pageSize = 20) =&gt;
+{
+    var errors = new Dictionary&lt;string, string[]&gt;();
+
+    if (page &lt; 1)
+    {
+        errors[nameof(page)] = ["pageは1以上を指定してください。"];
+    }
+
+    if (pageSize is &lt; 1 or &gt; 100)
+    {
+        errors[nameof(pageSize)] = ["pageSizeは1以上100以下を指定してください。"];
+    }
+
+    if (errors.Count &gt; 0)
+    {
+        return Results.ValidationProblem(errors);
+    }</code></pre>
+      <p>
+        request時にframeworkがquery parameterをbindingした後、application固有の範囲を検証します。複数項目が不正でも一度に返せるよう
+        dictionaryへerrorを蓄積し、1件以上なら400 Problem Detailsを返してページ計算へ進みません。
+      </p>
+      <pre><code>var items = tasks
+    .OrderBy(task =&gt; task.Id)
+    .Skip((page - 1) * pageSize)
+    .Take(pageSize)
+    .ToList();</code></pre>
+      <p>
+        先にID順を確定します。順序がなければ同じpage requestで同じ要素が返る保証を作れません。
+        <code>(page - 1) * pageSize</code>件を飛ばし、そこから最大<code>pageSize</code>件を取得します。page 2、pageSize 2なら
+        <code>(2 - 1) * 2 = 2</code>件を飛ばすため、ID 3から始まります。
+      </p>
+      <pre><code>return Results.Ok(new PagedResponse&lt;TaskSummary&gt;(
+    items,
+    page,
+    pageSize,
+    tasks.Count));</code></pre>
+      <p>
+        切り出した要素とrequest条件に加え、切り出す前の全件数を返します。<code>TotalCount</code>を<code>items.Count</code>にすると、常に現在pageの
+        件数しか伝わらず、clientが全体のページ数を計算できません。
+      </p>
+    </section>
+
+    <section aria-labelledby="tests">
+      <h2 id="tests">統合テストが固定する契約</h2>
+      <p>
+        <code>TaskPaginationTests</code>はproductionの<code>Program</code>をtest hostとして起動し、HTTP requestを送ります。page 2ではID 3、4と
+        metadataを検証し、page 0では400、存在する範囲より後のpageでは200と空listを検証します。これにより次回data sourceをEF Coreへ
+        変更したときも、外部契約が変わっていないことを検出できます。
+      </p>
+      <pre><code>var response = await client.GetAsync("/tasks?page=2&amp;pageSize=2");
+
+response.EnsureSuccessStatusCode();
+var page = await response.Content
+    .ReadFromJsonAsync&lt;PagedResponse&lt;TaskSummary&gt;&gt;();
+
+Assert.Equal(5, page.TotalCount);
+Assert.Equal([3, 4], page.Items.Select(task =&gt; task.Id));</code></pre>
+    </section>
+
+    <section aria-labelledby="verification">
+      <h2 id="verification">検証方法と結果</h2>
+      <pre><code>cd /home/yukihiro/Workspace/c#-learning/05-capstone
+dotnet format TaskManagementApi.slnx --verify-no-changes
+dotnet test TaskManagementApi.slnx</code></pre>
+      <p>
+        buildはwarning 0、error 0でした。統合テストは<code>Passed: 3, Failed: 0, Skipped: 0</code>です。実行環境のnetwork制限により
+        NuGet vulnerability情報取得のwarningは出ましたが、package restore、compile、3件のtest実行は成功しています。
+      </p>
+    </section>
+
+    <section aria-labelledby="assignment">
+      <h2 id="assignment">コードリーディング課題</h2>
+      <ol>
+        <li><code>page=3&amp;pageSize=2</code>を指定した場合、<code>Skip</code>する件数と返るtask IDを答えてください。</li>
+        <li><code>TotalCount</code>へ<code>items.Count</code>ではなく<code>tasks.Count</code>を設定する理由を説明してください。</li>
+        <li><code>page=4&amp;pageSize=2</code>を404ではなく、200と空の<code>items</code>で返す設計上の理由を説明してください。</li>
+      </ol>
+    </section>
+
+    <section aria-labelledby="completion">
+      <h2 id="completion">完了条件</h2>
+      <ul>
+        <li>pageとpageSizeからSkip件数を計算できる</li>
+        <li>安定した並び順とTotalCount metadataが必要な理由を説明できる</li>
+        <li>入力不正と、正しいが結果が空のrequestを区別できる</li>
+        <li>ページング統合テスト3件が成功する</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

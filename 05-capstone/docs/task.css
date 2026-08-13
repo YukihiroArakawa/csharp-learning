@@ -1,0 +1,69 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  line-height: 1.7;
+}
+
+body {
+  margin: 0;
+  background: #f5f7fa;
+  color: #20242a;
+}
+
+main {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 2rem;
+  background: #fff;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.3;
+}
+
+section {
+  margin-block: 2.5rem;
+}
+
+code {
+  color: #7a3e00;
+}
+
+pre {
+  overflow-x: auto;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  background: #18212b;
+  color: #f2f5f7;
+}
+
+pre code {
+  color: inherit;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 0.7rem;
+  border: 1px solid #c9d1d9;
+  text-align: left;
+  vertical-align: top;
+}
+
+@media (prefers-color-scheme: dark) {
+  body,
+  main {
+    background: #11161c;
+    color: #e8edf2;
+  }
+
+  code {
+    color: #ffbf7a;
+  }
+}

@@ -42,6 +42,8 @@ description: Guide AI-assisted C# and .NET learning in this repository for a Jav
 11. Do not leave the canonical exercise instructions in Markdown. The HTML must be directly viewable in a browser.
 12. Link the HTML from the chat and summarize only the immediate starting action.
 13. Update an existing exercise HTML only when the learner explicitly requests the update and the requested content is directly relevant to that exercise. If either condition is not met, answer in chat without changing the HTML.
+14. Create a paired Markdown answer sheet for every new exercise under the same `docs/` directory. Name it `<exercise-base>-answers.md`, such as `01-di-lifetimes-answers.md`. Keep canonical explanations and instructions in HTML; the answer sheet contains only the HTML link, the review questions, blank answer sections, and a completion-status field.
+15. Link both the HTML exercise and its Markdown answer sheet from the chat. When the learner answers in chat instead of editing the sheet, do not copy the answer into the file unless explicitly requested.
 
 ## Review results and record progress
 
