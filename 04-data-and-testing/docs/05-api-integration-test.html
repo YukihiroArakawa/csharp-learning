@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WebApplicationFactoryでAPI統合テストを読む</title>
+  <link rel="stylesheet" href="task.css">
+</head>
+<body>
+  <main>
+    <h1>WebApplicationFactoryでAPI統合テストを読む</h1>
+
+    <section aria-labelledby="overview">
+      <h2 id="overview">今回の課題</h2>
+      <ul>
+        <li>目安時間：35〜45分</li>
+        <li>前提：サービスを直接呼ぶテストと、SQLiteインメモリdatabaseの生存期間を説明できる</li>
+        <li>目的：<code>WebApplicationFactory</code>がapplicationを起動する範囲と、API統合テストが保証する範囲を説明できる</li>
+      </ul>
+      <p>
+        Codexが<code>GET /tasks?completed=false</code>へrequestを送り、status codeとJSON responseを検証する統合テストを実装しました。
+        学習者はコードを手入力せず、前回のサービステストとの違い、production用DI登録をtest用へ差し替える箇所、requestがresponseになるまでの
+        経路を読みます。
+      </p>
+    </section>
+
+    <section aria-labelledby="meaning">
+      <h2 id="meaning">API統合テストが確認するもの</h2>
+      <p>
+        前回のテストは<code>TaskQueryService</code>を<code>new</code>して直接呼びました。そのため、queryのfilter・order・projectionは確認できても、
+        URLが正しく登録されているか、<code>completed=false</code>がC#の<code>bool?</code>へ変換されるか、serviceがDIから解決できるか、結果が
+        JSONへ変換されるかは確認していません。
+      </p>
+      <p>
+        今回のテストは<code>WebApplicationFactory&lt;Program&gt;</code>でproduction applicationのentry pointを指定します。factoryは
+        <code>Program.cs</code>の起動処理を使ってtest用hostを組み立て、ASP.NET Core pipelineへ送れる<code>HttpClient</code>を作ります。
+        requestはrouting、query parameterのmodel binding、DI、endpoint、service、EF Core、SQLiteを通り、responseはJSON serializationを
+        通ってclientへ戻ります。
+      </p>
+      <p>
+        test serverはprocess外のweb serverを立てず、通常は実際のTCP portも開きません。そのため高速で安定しています。一方で、OSのnetwork、
+        reverse proxy、TLSなどは対象外です。「HTTP形式でapplication全体を結合して確認する」が、production環境を端から端まで再現する
+        end-to-end testではない、という位置付けです。
+      </p>
+
+      <figure aria-labelledby="flow-caption">
+        <div class="diagram-root">
+          <div class="diagram-title">統合テストで通る処理</div>
+          <div class="diagram-flow">
+            <div class="diagram-node">HttpClient<br>GET /tasks?completed=false</div>
+            <div class="diagram-node">test server<br>routing・model binding</div>
+            <div class="diagram-node">endpoint・DI<br>TaskQueryService</div>
+            <div class="diagram-node">EF Core<br>test用SQLite</div>
+            <div class="diagram-node">HTTP response<br>200 + JSON</div>
+          </div>
+        </div>
+        <figcaption id="flow-caption">
+          実networkは迂回するが、ASP.NET Core application内のrequest pipelineは結合したまま検証する。
+        </figcaption>
+      </figure>
+    </section>
+
+    <section aria-labelledby="factory">
+      <h2 id="factory">WebApplicationFactoryとDIの差し替え</h2>
+      <p>
+        productionでは<code>appsettings.json</code>の<code>Data Source=tasks.db</code>を使います。統合テストがこのfileを共有すると、local dataを
+        壊したり、以前の実行結果によってtestが変わったりします。そこで、productionの起動処理は再利用しつつ、
+        <code>TaskDbContext</code>の設定だけをtest専用のSQLiteインメモリdatabaseへ差し替えます。
+      </p>
+      <p>
+        <code>ConfigureWebHost</code>はtest hostを組み立てる準備段階で呼ばれます。既存の<code>DbContextOptions&lt;TaskDbContext&gt;</code>登録を
+        <code>RemoveAll</code>で除き、同じservice typeをtest用connectionで再登録します。runtimeにrequestが来ると、DI containerは差し替え後の
+        登録を使ってrequest scopeごとの<code>TaskDbContext</code>を生成します。
+      </p>
+      <p>
+        factoryが一つのconnectionを開いたまま保持するのは、前回と同じくSQLiteインメモリdatabaseの寿命がconnectionの寿命だからです。
+        request scopeが終わって<code>TaskDbContext</code>が破棄されてもdatabaseは残り、factoryが破棄されるとconnectionとdatabaseも消えます。
+      </p>
+    </section>
+
+    <section aria-labelledby="syntax">
+      <h2 id="syntax">今回初めて読むC#の形</h2>
+      <h3><code>public partial class Program;</code></h3>
+      <p>
+        top-level statementsを使う<code>Program.cs</code>でも、compilerは内部的に<code>Program</code> classを生成します。ただしtest projectから
+        generic type argumentとして参照できる公開typeが必要です。<code>partial</code>は、一つのclass定義を複数箇所へ分けられることを示します。
+        この1行は自動生成される<code>Program</code>の別部分をpublicとして宣言し、applicationの動作は追加しません。Javaにはclassを複数fileへ
+        分割する同等の言語機能はありません。
+      </p>
+
+      <h3><code>IClassFixture&lt;TaskApiFactory&gt;</code></h3>
+      <p>
+        xUnitはtest classを作る際にfixtureも作成し、primary constructorの<code>factory</code>へ渡します。test methodごとに重いapplication hostを
+        手動作成する必要がなく、同じtest class内で共有できます。JUnitのextensionやSpring Boot test contextが担う準備・共有と似ていますが、
+        xUnitではfixture interfaceとconstructor injectionとして明示されています。
+      </p>
+    </section>
+
+    <section aria-labelledby="files">
+      <h2 id="files">変更対象ファイル</h2>
+      <table>
+        <thead><tr><th>ファイル</th><th>変更内容</th></tr></thead>
+        <tbody>
+          <tr><td><code>04-data-and-testing/TaskApi/Program.cs</code></td><td>test projectからentry pointを参照できるpartial Programを公開</td></tr>
+          <tr><td><code>04-data-and-testing/TaskApi.Tests/TaskApi.Tests.csproj</code></td><td>WebApplicationFactoryを提供するtesting packageを追加</td></tr>
+          <tr><td><code>04-data-and-testing/TaskApi.Tests/TaskApiFactory.cs</code></td><td>applicationを起動し、DB登録をtest用へ差し替えるfactoryを新規作成</td></tr>
+          <tr><td><code>04-data-and-testing/TaskApi.Tests/TaskApiIntegrationTests.cs</code></td><td>GET /tasksをHTTP経由で検証する統合テストを新規作成</td></tr>
+          <tr><td><code>04-data-and-testing/docs/05-api-integration-test.html</code></td><td>この課題説明を新規作成</td></tr>
+        </tbody>
+      </table>
+      <p>理解確認前なので、rootの<code>README.md</code>はまだ変更しません。</p>
+    </section>
+
+    <section aria-labelledby="program-code">
+      <h2 id="program-code">実装コード：entry pointを公開する</h2>
+      <h3><code>04-data-and-testing/TaskApi/Program.cs</code></h3>
+      <pre><code>app.Run();
+
+public partial class Program;</code></pre>
+      <p>
+        通常起動では<code>app.Run()</code>がweb applicationを実行します。testでは<code>WebApplicationFactory&lt;Program&gt;</code>がこのentry pointを
+        発見し、test hostとして起動します。末尾の宣言はtestからtypeを参照可能にするための接点です。
+      </p>
+    </section>
+
+    <section aria-labelledby="factory-code">
+      <h2 id="factory-code">実装コード：test用application factory</h2>
+      <h3><code>04-data-and-testing/TaskApi.Tests/TaskApiFactory.cs</code></h3>
+      <pre><code>public sealed class TaskApiFactory : WebApplicationFactory&lt;Program&gt;
+{
+    private readonly SqliteConnection connection;
+
+    public TaskApiFactory()
+    {
+        SQLitePCL.Batteries_V2.Init();
+        connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+    }
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.ConfigureServices(services =&gt;
+        {
+            services.RemoveAll&lt;DbContextOptions&lt;TaskDbContext&gt;&gt;();
+            services.AddDbContext&lt;TaskDbContext&gt;(options =&gt;
+                options.UseSqlite(connection));
+        });
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+
+        if (disposing)
+        {
+            connection.Dispose();
+        }
+    }
+}</code></pre>
+      <p>
+        constructorがtest databaseの所有者です。<code>ConfigureWebHost</code>ではproduction registrationのうちDB設定だけを置換し、endpointや
+        <code>TaskQueryService</code>などはproductionと同じ登録を残します。最後にxUnitがfixtureを破棄するとfactoryの<code>Dispose</code>が呼ばれ、
+        base classがhostやclient関連を片付けた後、保持していたconnectionを閉じます。
+      </p>
+    </section>
+
+    <section aria-labelledby="test-code">
+      <h2 id="test-code">実装コード：HTTP requestからJSONまで</h2>
+      <h3><code>04-data-and-testing/TaskApi.Tests/TaskApiIntegrationTests.cs</code></h3>
+      <pre><code>public sealed class TaskApiIntegrationTests(TaskApiFactory factory)
+    : IClassFixture&lt;TaskApiFactory&gt;
+{
+    [Fact]
+    public async Task GetTasks_WhenCompletedIsFalse_ReturnsIncompleteTasksAsJson()
+    {
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService&lt;TaskDbContext&gt;();
+            await dbContext.Database.EnsureCreatedAsync();
+
+            dbContext.Tasks.AddRange(
+                new TaskItem { Id = 2, Title = "完了済み", IsCompleted = true },
+                new TaskItem { Id = 1, Title = "統合テストを読む", IsCompleted = false });
+            await dbContext.SaveChangesAsync();
+        }
+
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/tasks?completed=false");
+
+        response.EnsureSuccessStatusCode();
+        var tasks = await response.Content.ReadFromJsonAsync&lt;List&lt;TaskSummary&gt;&gt;();
+        var task = Assert.Single(Assert.IsType&lt;List&lt;TaskSummary&gt;&gt;(tasks));
+        Assert.Equal(1, task.Id);
+        Assert.Equal("統合テストを読む", task.Title);
+        Assert.False(task.IsCompleted);
+    }
+}</code></pre>
+      <p>
+        ArrangeではfactoryのDI containerからscopeを一つ作り、test hostと同じSQLiteへ2件保存します。完了済みと未完了を混ぜることで、
+        query parameterがmodel bindingされ、filterへ届いたことを判定できます。scopeを閉じてもfactory所有のconnectionは開いているためdataは残ります。
+      </p>
+      <p>
+        Actでは<code>CreateClient</code>が返した<code>HttpClient</code>からURLへGETを送ります。ASP.NET Coreが<code>false</code>をnullable boolへ変換し、
+        scoped serviceを生成し、endpointを実行します。serviceが返した<code>TaskSummary</code>はframeworkによってJSONへserializeされます。
+      </p>
+      <p>
+        Assertでは、まず2xx responseであることを確認し、response bodyを<code>List&lt;TaskSummary&gt;</code>へdeserializeします。結果がnullでなく、
+        ちょうど1件で、未完了taskの値を持つことを検証します。これによりstatus、JSONの形、filter結果を一つのtestで結び付けています。
+      </p>
+    </section>
+
+    <section aria-labelledby="spring">
+      <h2 id="spring">Spring Bootとの対応</h2>
+      <p>
+        役割としては、Spring Bootでapplication contextを起動し、MockMvcやtest用clientからcontrollerへrequestを送る統合テストに近いものです。
+        Spring側でもproduction beanをtest configurationで差し替えるように、今回はASP.NET Coreのservice collectionに登録された
+        <code>DbContextOptions</code>をtest用へ差し替えます。
+      </p>
+      <p>
+        framework固有のannotationやAPI名は異なりますが、productionの組み立てをできるだけ再利用し、外部依存だけを制御可能なtest doubleへ
+        置き換える考え方は共通です。今回のSQLiteはSQLを本当に実行するため、mockではなく軽量な実装への置換です。
+      </p>
+    </section>
+
+    <section aria-labelledby="verification">
+      <h2 id="verification">検証方法と観測結果</h2>
+      <pre><code>cd /home/yukihiro/Workspace/c#-learning/04-data-and-testing
+nix develop -c dotnet test TaskApi.Tests/TaskApi.Tests.csproj</code></pre>
+      <p>
+        サービステストと今回の統合テストを合わせて、<code>Passed: 2, Failed: 0, Skipped: 0</code>でした。統合テストはtest hostの起動、schema作成、
+        test data保存、HTTP request、JSONの読み取りまで完了しています。
+      </p>
+    </section>
+
+    <section aria-labelledby="assignment">
+      <h2 id="assignment">コードリーディング課題</h2>
+      <p>次の3問へ、該当コードを根拠に答えてください。</p>
+      <ol>
+        <li>前回のサービステストでは通らず、今回の統合テストでは実際に通るASP.NET Coreの処理を二つ挙げてください。</li>
+        <li><code>RemoveAll&lt;DbContextOptions&lt;TaskDbContext&gt;&gt;()</code>を行わずにtest用<code>AddDbContext</code>だけを追加すると、どのDB設定を使うかが不明瞭になります。何のために既存登録を削除していますか。</li>
+        <li>test dataを保存したscopeが破棄された後でも、HTTP requestから同じdataを取得できるのはなぜですか。<code>TaskDbContext</code>とSQLite connectionの所有者を区別して答えてください。</li>
+      </ol>
+    </section>
+
+    <section aria-labelledby="completion">
+      <h2 id="completion">完了条件</h2>
+      <ul>
+        <li>サービステストとAPI統合テストで通る層の違いを説明できる</li>
+        <li>productionのentry pointを再利用し、DB登録だけをtest用へ置換する理由を説明できる</li>
+        <li>request scopeのDbContextとfactory所有connectionの生存期間を区別できる</li>
+        <li><code>dotnet test</code>で既存テストを含む2件が成功する</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

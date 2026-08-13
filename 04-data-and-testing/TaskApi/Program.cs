@@ -29,3 +29,5 @@ app.MapGet("/tasks", async (
 });
 
 app.Run();
+
+public partial class Program;

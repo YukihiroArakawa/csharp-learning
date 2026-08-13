@@ -203,7 +203,7 @@ dotnet format TypeSystemSamples/TypeSystemSamples.csproj
 - [x] LINQ クエリが SQL に翻訳される箇所を確認する。
 - [x] `DbContext` を scoped として扱う理由を説明できる。
 - [x] サービス層の単体テストを 1 本以上書く。
-- [ ] `WebApplicationFactory` を使った API の統合テストを 1 本以上書く。
+- [x] `WebApplicationFactory` を使った API の統合テストを 1 本以上書く。
 - [ ] `dotnet test` を実行し、すべて成功する状態にする。
 
 ### 5. 最終課題と現場適応
