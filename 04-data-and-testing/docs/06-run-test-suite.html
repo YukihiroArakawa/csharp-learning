@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>solution単位で全テストを実行する</title>
+  <link rel="stylesheet" href="task.css">
+</head>
+<body>
+  <main>
+    <h1>solution単位で全テストを実行する</h1>
+
+    <section aria-labelledby="overview">
+      <h2 id="overview">今回の課題</h2>
+      <ul>
+        <li>目安時間：20〜30分</li>
+        <li>前提：サービステストとAPI統合テストが検証する範囲を説明できる</li>
+        <li>目的：solutionを検証入口として、production buildと全testを一つのcommandで実行できることを確認する</li>
+      </ul>
+      <p>
+        Codexがproduction projectとtest projectを束ねるsolutionを追加しました。学習者はsolutionが実行単位ではなくprojectの集合を表すこと、
+        <code>dotnet test</code>が依存関係の復元、build、test discovery、test実行を順に行うことを、fileと実行結果から読みます。
+      </p>
+    </section>
+
+    <section aria-labelledby="why-solution">
+      <h2 id="why-solution">なぜprojectではなくsolutionを指定するのか</h2>
+      <p>
+        前回までは<code>dotnet test TaskApi.Tests/TaskApi.Tests.csproj</code>を実行していました。このtest projectは
+        <code>ProjectReference</code>で<code>TaskApi</code>を参照しているため、現在の構成ではproduction projectも自動的にbuildされます。
+        したがって、このcommand自体が誤りだったわけではありません。
+      </p>
+      <p>
+        ただし、projectを直接指定するcommandは「どのprojectがフェーズ全体の検証対象か」という構成をcommandを知る人に依存させます。
+        将来別のtest projectが増えたとき、そのprojectを指定し忘れても既存commandは成功します。solutionへproduction projectとtest projectを
+        明示しておけば、開発者やCIは同じsolutionを入口にして、登録されたproject全体を復元・build・testできます。
+      </p>
+      <p>
+        Javaで複数moduleを親のMaven projectやGradle buildへ登録し、rootから<code>mvn test</code>や<code>gradle test</code>を実行する考え方に近いです。
+        solution自身はC# codeをcompileするprojectではなく、関連projectをまとめるworkspace兼command targetです。
+      </p>
+    </section>
+
+    <section aria-labelledby="slnx">
+      <h2 id="slnx"><code>.slnx</code>とは</h2>
+      <p>
+        <code>.slnx</code>はsolutionをXMLで表す形式です。従来の<code>.sln</code>より内容が小さく、人間がproject一覧を読みやすい形式です。
+        今回は二つの<code>.csproj</code>への相対pathだけを記録しています。どちらのprojectを先にbuildすべきかは、test project内の
+        <code>ProjectReference</code>を.NET SDKが読み取って決定します。
+      </p>
+      <p>
+        solutionへprojectを登録してもproduction codeやruntime behaviorは変わりません。変わるのは開発時とCIで使う検証対象のまとまりです。
+        applicationを実行する場合は引き続きweb projectを指定し、全testを検証する場合はsolutionを指定します。
+      </p>
+    </section>
+
+    <section aria-labelledby="command-flow">
+      <h2 id="command-flow"><code>dotnet test</code>の実行順序</h2>
+      <p>
+        <code>dotnet test TaskApi.slnx</code>を実行すると、最初にsolution内のprojectとpackage依存を読み、必要なNuGet packageをrestoreします。
+        続いてproduction projectをbuildし、それを参照するtest projectをbuildします。compile errorがあればtest methodを一つも実行せず、
+        この段階でcommandは失敗します。
+      </p>
+      <p>
+        build後、test runnerがtest assemblyから<code>[Fact]</code>の付いたmethodを発見して実行します。今回はサービスを直接呼ぶtestと、
+        <code>WebApplicationFactory</code>からHTTP requestを送るtestの2件です。最後に成功・失敗・skipの件数を集計し、すべて成功すれば
+        processの終了code 0を返します。CIは表示文字列を人間のように読むのではなく、この終了codeによって次の処理へ進むかを判断できます。
+      </p>
+      <p>
+        testが1件でも失敗する、buildできない、またはpackage restoreに失敗すると終了codeは0以外になります。したがって「2件成功」という
+        表示だけでなく、command全体が正常終了したことが自動化にとって重要です。fishでは直後の<code>$status</code>で終了codeを確認できます。
+      </p>
+    </section>
+
+    <section aria-labelledby="files">
+      <h2 id="files">変更対象ファイル</h2>
+      <table>
+        <thead><tr><th>ファイル</th><th>変更内容</th></tr></thead>
+        <tbody>
+          <tr><td><code>04-data-and-testing/TaskApi.slnx</code></td><td>production projectとtest projectを束ねるsolutionを新規作成</td></tr>
+          <tr><td><code>04-data-and-testing/docs/06-run-test-suite.html</code></td><td>この課題説明を新規作成</td></tr>
+        </tbody>
+      </table>
+      <p>理解確認前なので、rootの<code>README.md</code>はまだ変更しません。</p>
+    </section>
+
+    <section aria-labelledby="implementation">
+      <h2 id="implementation">実装コード</h2>
+      <h3><code>04-data-and-testing/TaskApi.slnx</code></h3>
+      <pre><code>&lt;Solution&gt;
+  &lt;Project Path="TaskApi.Tests/TaskApi.Tests.csproj" /&gt;
+  &lt;Project Path="TaskApi/TaskApi.csproj" /&gt;
+&lt;/Solution&gt;</code></pre>
+      <p>
+        root elementが一つのsolutionを表し、各<code>Project</code> elementがsolution fileからの相対pathでprojectを登録します。
+        test projectとproduction projectの両方が明示されているため、solutionを対象にしたIDEやCLIは両方をworkspaceへ読み込みます。
+      </p>
+      <p>
+        project間の依存関係はここに重複記載しません。<code>TaskApi.Tests.csproj</code>の
+        <code>&lt;ProjectReference Include="..\TaskApi\TaskApi.csproj" /&gt;</code>が、test projectをbuildする前にproduction projectが必要だと示します。
+      </p>
+    </section>
+
+    <section aria-labelledby="verification">
+      <h2 id="verification">検証commandと観測結果</h2>
+      <pre><code>cd /home/yukihiro/Workspace/c#-learning/04-data-and-testing
+nix develop -c dotnet test TaskApi.slnx
+echo $status</code></pre>
+      <p>
+        fishで実行した場合、最後の<code>echo $status</code>は直前commandの終了codeを表示します。Codexの検証ではproductionとtest projectが
+        buildされ、<code>Passed: 2, Failed: 0, Skipped: 0</code>となり、<code>dotnet test</code>は終了code 0で完了しました。
+      </p>
+      <table>
+        <thead><tr><th>test</th><th>検証範囲</th><th>結果</th></tr></thead>
+        <tbody>
+          <tr><td><code>TaskQueryServiceTests</code></td><td>service・EF Core・SQLite</td><td>成功</td></tr>
+          <tr><td><code>TaskApiIntegrationTests</code></td><td>HTTP pipeline・service・EF Core・SQLite・JSON</td><td>成功</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="assignment">
+      <h2 id="assignment">コードリーディング課題</h2>
+      <p>次の3問へ答えてください。</p>
+      <ol>
+        <li><code>TaskApi.slnx</code>はapplicationのruntime behaviorを変えるfileですか。それとも開発・検証対象をまとめるfileですか。</li>
+        <li><code>dotnet test TaskApi.slnx</code>でproduction projectのcompile errorも検出できるのはなぜですか。</li>
+        <li>test結果の<code>Passed: 2, Failed: 0</code>と終了code 0は、それぞれ人間とCIに何を伝えますか。</li>
+      </ol>
+    </section>
+
+    <section aria-labelledby="completion">
+      <h2 id="completion">完了条件</h2>
+      <ul>
+        <li>solutionとprojectの役割の違いを説明できる</li>
+        <li><code>dotnet test</code>がrestore・build・testを行うことを説明できる</li>
+        <li>test件数の集計とprocess終了codeの役割を区別できる</li>
+        <li><code>dotnet test TaskApi.slnx</code>で2件すべてが成功する</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
