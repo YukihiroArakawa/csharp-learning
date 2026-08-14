@@ -1,18 +1,28 @@
+using Microsoft.EntityFrameworkCore;
+using TaskManagementApi.Data;
 using TaskManagementApi.Models;
+using TaskManagementApi.Services;
+
+SQLitePCL.Batteries_V2.Init();
 
 var builder = WebApplication.CreateBuilder(args);
+
+var connectionString = builder.Configuration
+    .GetConnectionString("TaskDatabase")
+    ?? throw new InvalidOperationException(
+        "Connection string 'TaskDatabase' is not configured.");
+
+builder.Services.AddDbContext<TaskDbContext>(options =>
+    options.UseSqlite(connectionString));
+builder.Services.AddScoped<TaskQueryService>();
+
 var app = builder.Build();
 
-var tasks = new List<TaskSummary>
-{
-    new(1, "要件を確認する", true),
-    new(2, "ページングを実装する", false),
-    new(3, "テストを書く", false),
-    new(4, "READMEを更新する", false),
-    new(5, "変更をレビューする", false),
-};
-
-app.MapGet("/tasks", IResult (int page = 1, int pageSize = 20) =>
+app.MapGet("/tasks", async Task<IResult> (
+    TaskQueryService taskQueryService,
+    CancellationToken cancellationToken,
+    int page = 1,
+    int pageSize = 20) =>
 {
     var errors = new Dictionary<string, string[]>();
 
@@ -31,17 +41,12 @@ app.MapGet("/tasks", IResult (int page = 1, int pageSize = 20) =>
         return Results.ValidationProblem(errors);
     }
 
-    var items = tasks
-        .OrderBy(task => task.Id)
-        .Skip((page - 1) * pageSize)
-        .Take(pageSize)
-        .ToList();
-
-    return Results.Ok(new PagedResponse<TaskSummary>(
-        items,
+    var result = await taskQueryService.GetTasksAsync(
         page,
         pageSize,
-        tasks.Count));
+        cancellationToken);
+
+    return Results.Ok(result);
 });
 
 app.Run();

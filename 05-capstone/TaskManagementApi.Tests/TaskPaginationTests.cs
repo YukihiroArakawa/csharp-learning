@@ -1,16 +1,16 @@
 using System.Net;
 using System.Net.Http.Json;
-using Microsoft.AspNetCore.Mvc.Testing;
 using TaskManagementApi.Models;
 
 namespace TaskManagementApi.Tests;
 
-public sealed class TaskPaginationTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+public sealed class TaskPaginationTests(TaskManagementApiFactory factory)
+    : IClassFixture<TaskManagementApiFactory>
 {
     [Fact]
     public async Task GetTasks_WhenSecondPageIsRequested_ReturnsTwoItemsAndMetadata()
     {
+        await factory.ResetDatabaseAsync();
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/tasks?page=2&pageSize=2");
@@ -29,6 +29,7 @@ public sealed class TaskPaginationTests(WebApplicationFactory<Program> factory)
     [Fact]
     public async Task GetTasks_WhenPageIsLessThanOne_ReturnsBadRequest()
     {
+        await factory.ResetDatabaseAsync();
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/tasks?page=0&pageSize=2");
@@ -39,6 +40,7 @@ public sealed class TaskPaginationTests(WebApplicationFactory<Program> factory)
     [Fact]
     public async Task GetTasks_WhenPageIsPastLastPage_ReturnsEmptyItems()
     {
+        await factory.ResetDatabaseAsync();
         using var client = factory.CreateClient();
 
         var page = await client.GetFromJsonAsync<PagedResponse<TaskSummary>>(
