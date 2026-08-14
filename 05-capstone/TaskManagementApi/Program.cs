@@ -15,8 +15,38 @@ var connectionString = builder.Configuration
 builder.Services.AddDbContext<TaskDbContext>(options =>
     options.UseSqlite(connectionString));
 builder.Services.AddScoped<TaskQueryService>();
+builder.Services.AddScoped<TaskCommandService>();
 
 var app = builder.Build();
+
+app.MapPost("/tasks", async Task<IResult> (
+    CreateTaskRequest request,
+    TaskCommandService taskCommandService,
+    CancellationToken cancellationToken) =>
+{
+    var title = request.Title?.Trim();
+    var errors = new Dictionary<string, string[]>();
+
+    if (string.IsNullOrWhiteSpace(title))
+    {
+        errors[nameof(request.Title)] = ["titleは必須です。"];
+    }
+    else if (title.Length > 100)
+    {
+        errors[nameof(request.Title)] = ["titleは100文字以下で指定してください。"];
+    }
+
+    if (errors.Count > 0)
+    {
+        return Results.ValidationProblem(errors);
+    }
+
+    var task = await taskCommandService.CreateTaskAsync(
+        title!,
+        cancellationToken);
+
+    return Results.Created($"/tasks/{task.Id}", task);
+});
 
 app.MapGet("/tasks/{id:int}", async Task<IResult> (
     int id,

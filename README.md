@@ -212,7 +212,7 @@ dotnet format TypeSystemSamples/TypeSystemSamples.csproj
 - [x] ページング API の統合テストを追加する。
 - [x] EF Core による永続化と initial migration を追加する。
 - [x] task を ID で取得する endpoint を実装する。
-- [ ] task を作成する endpoint と入力検証を実装する。
+- [x] task を作成する endpoint と入力検証を実装する。
 - [ ] task を更新する endpoint と入力検証を実装する。
 - [ ] task を削除する endpoint を実装する。
 - [ ] 例外応答を Problem Details 形式へ統一する。
