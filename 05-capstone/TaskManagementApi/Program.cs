@@ -19,6 +19,20 @@ builder.Services.AddScoped<TaskCommandService>();
 
 var app = builder.Build();
 
+app.MapDelete("/tasks/{id:int}", async Task<IResult> (
+    int id,
+    TaskCommandService taskCommandService,
+    CancellationToken cancellationToken) =>
+{
+    var deleted = await taskCommandService.DeleteTaskAsync(
+        id,
+        cancellationToken);
+
+    return deleted
+        ? Results.NoContent()
+        : Results.NotFound();
+});
+
 app.MapPut("/tasks/{id:int}", async Task<IResult> (
     int id,
     UpdateTaskRequest request,

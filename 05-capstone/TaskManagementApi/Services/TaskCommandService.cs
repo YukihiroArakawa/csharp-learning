@@ -49,4 +49,23 @@ public sealed class TaskCommandService(TaskDbContext dbContext)
             task.Title,
             task.IsCompleted);
     }
+
+    public async Task<bool> DeleteTaskAsync(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        var task = await dbContext.Tasks.SingleOrDefaultAsync(
+            task => task.Id == id,
+            cancellationToken);
+
+        if (task is null)
+        {
+            return false;
+        }
+
+        dbContext.Tasks.Remove(task);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return true;
+    }
 }
