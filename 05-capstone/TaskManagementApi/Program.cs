@@ -16,8 +16,18 @@ builder.Services.AddDbContext<TaskDbContext>(options =>
     options.UseSqlite(connectionString));
 builder.Services.AddScoped<TaskQueryService>();
 builder.Services.AddScoped<TaskCommandService>();
+builder.Services.AddProblemDetails(options =>
+{
+    options.CustomizeProblemDetails = context =>
+    {
+        context.ProblemDetails.Extensions["traceId"] =
+            context.HttpContext.TraceIdentifier;
+    };
+});
 
 var app = builder.Build();
+
+app.UseExceptionHandler();
 
 app.MapDelete("/tasks/{id:int}", async Task<IResult> (
     int id,
