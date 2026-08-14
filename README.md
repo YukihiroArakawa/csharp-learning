@@ -213,7 +213,7 @@ dotnet format TypeSystemSamples/TypeSystemSamples.csproj
 - [x] EF Core による永続化と initial migration を追加する。
 - [x] task を ID で取得する endpoint を実装する。
 - [x] task を作成する endpoint と入力検証を実装する。
-- [ ] task を更新する endpoint と入力検証を実装する。
+- [x] task を更新する endpoint と入力検証を実装する。
 - [ ] task を削除する endpoint を実装する。
 - [ ] 例外応答を Problem Details 形式へ統一する。
 - [ ] Options パターンで設定値を検証する。

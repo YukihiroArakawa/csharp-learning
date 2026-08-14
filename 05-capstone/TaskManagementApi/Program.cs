@@ -19,6 +19,40 @@ builder.Services.AddScoped<TaskCommandService>();
 
 var app = builder.Build();
 
+app.MapPut("/tasks/{id:int}", async Task<IResult> (
+    int id,
+    UpdateTaskRequest request,
+    TaskCommandService taskCommandService,
+    CancellationToken cancellationToken) =>
+{
+    var title = request.Title?.Trim();
+    var errors = new Dictionary<string, string[]>();
+
+    if (string.IsNullOrWhiteSpace(title))
+    {
+        errors[nameof(request.Title)] = ["titleは必須です。"];
+    }
+    else if (title.Length > 100)
+    {
+        errors[nameof(request.Title)] = ["titleは100文字以下で指定してください。"];
+    }
+
+    if (errors.Count > 0)
+    {
+        return Results.ValidationProblem(errors);
+    }
+
+    var task = await taskCommandService.UpdateTaskAsync(
+        id,
+        title!,
+        request.IsCompleted,
+        cancellationToken);
+
+    return task is null
+        ? Results.NotFound()
+        : Results.Ok(task);
+});
+
 app.MapPost("/tasks", async Task<IResult> (
     CreateTaskRequest request,
     TaskCommandService taskCommandService,
