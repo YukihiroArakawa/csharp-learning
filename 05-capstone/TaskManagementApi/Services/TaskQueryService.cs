@@ -6,6 +6,20 @@ namespace TaskManagementApi.Services;
 
 public sealed class TaskQueryService(TaskDbContext dbContext)
 {
+    public Task<TaskSummary?> GetTaskAsync(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        return dbContext.Tasks
+            .AsNoTracking()
+            .Where(task => task.Id == id)
+            .Select(task => new TaskSummary(
+                task.Id,
+                task.Title,
+                task.IsCompleted))
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<PagedResponse<TaskSummary>> GetTasksAsync(
         int page,
         int pageSize,

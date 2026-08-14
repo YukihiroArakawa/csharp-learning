@@ -18,6 +18,18 @@ builder.Services.AddScoped<TaskQueryService>();
 
 var app = builder.Build();
 
+app.MapGet("/tasks/{id:int}", async Task<IResult> (
+    int id,
+    TaskQueryService taskQueryService,
+    CancellationToken cancellationToken) =>
+{
+    var task = await taskQueryService.GetTaskAsync(id, cancellationToken);
+
+    return task is null
+        ? Results.NotFound()
+        : Results.Ok(task);
+});
+
 app.MapGet("/tasks", async Task<IResult> (
     TaskQueryService taskQueryService,
     CancellationToken cancellationToken,

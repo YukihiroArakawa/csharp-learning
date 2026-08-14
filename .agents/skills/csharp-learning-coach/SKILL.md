@@ -44,15 +44,17 @@ description: Guide AI-assisted C# and .NET learning in this repository for a Jav
 13. Update an existing exercise document only when the learner explicitly requests the update and the requested content is directly relevant to that exercise. If either condition is not met, answer in chat without changing the document.
 14. Create a paired Markdown answer sheet for every new exercise under the same `docs/` directory. Name it `<exercise-base>-answers.md`, such as `01-di-lifetimes-answers.md`. Keep canonical explanations and instructions in the exercise Markdown; the answer sheet contains only the exercise link, the review questions, blank answer sections, and a completion-status field.
 15. Link both the exercise Markdown and its answer sheet from the chat. When the learner answers in chat instead of editing the sheet, do not copy the answer into the file unless explicitly requested.
+16. Before presenting an exercise, audit every review question against the exercise document. For each question, identify the exact prose, code, or observed result that teaches every fact required for a correct answer. Add the missing explanation or simplify the question if the document alone is insufficient; do not rely on prior chat or unstated inference.
 
 ## Review results and record progress
 
 1. After implementing, run the relevant formatter, build, tests, and behavior checks before presenting the result.
 2. Walk through the changed files in dependency or execution order. Explain why the code has this shape and how it differs from the Java/Spring equivalent.
 3. Give the learner a small review assignment: predict output, trace one path, explain a lifetime or framework convention, or identify a plausible failure caused by a wrong choice.
-4. When the learner responds, explain the review result first. State explicitly whether the learning item is complete and identify any unmet understanding or verification condition.
-5. Keep each README checklist item small enough to match one exercise-and-review rally. Before starting an exercise, split a broader incomplete item into independently verifiable outcomes without marking unfinished work complete.
-6. Update the corresponding README TODO only after the code is verified and the learner demonstrates the intended understanding.
-7. Before committing C# changes, run `dotnet format --verify-no-changes` for the affected project. If it fails, format and verify again.
-8. Commit the implementation, exercise document, answer sheet, and README update together with an appropriate Conventional Commit. Exclude unrelated changes.
-9. On milestone deadlines, record completed, incomplete, and deferred work in README. Do not move deadlines; defer lower-priority work instead.
+4. Before grading each answer, re-read the corresponding question and its supporting section in the exercise document. Do not require facts, terminology, or reasoning that the document did not adequately teach. If the material is insufficient, fix the material and accept a reasonable answer instead of treating the learner's answer as deficient.
+5. When the learner responds, explain the review result first. State explicitly whether the learning item is complete and identify any unmet understanding or verification condition.
+6. Keep each README checklist item small enough to match one exercise-and-review rally. Before starting an exercise, split a broader incomplete item into independently verifiable outcomes without marking unfinished work complete.
+7. Update the corresponding README TODO only after the code is verified and the learner demonstrates the intended understanding.
+8. Before committing C# changes, run `dotnet format --verify-no-changes` for the affected project. If it fails, format and verify again.
+9. Commit the implementation, exercise document, answer sheet, and README update together with an appropriate Conventional Commit. Exclude unrelated changes.
+10. On milestone deadlines, record completed, incomplete, and deferred work in README. Do not move deadlines; defer lower-priority work instead.
