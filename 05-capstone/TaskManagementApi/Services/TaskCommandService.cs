@@ -4,7 +4,9 @@ using TaskManagementApi.Models;
 
 namespace TaskManagementApi.Services;
 
-public sealed class TaskCommandService(TaskDbContext dbContext)
+public sealed class TaskCommandService(
+    TaskDbContext dbContext,
+    ILogger<TaskCommandService> logger)
 {
     public async Task<TaskSummary> CreateTaskAsync(
         string title,
@@ -18,6 +20,9 @@ public sealed class TaskCommandService(TaskDbContext dbContext)
 
         dbContext.Tasks.Add(task);
         await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogInformation(
+            "Created task {TaskId}",
+            task.Id);
 
         return new TaskSummary(
             task.Id,
@@ -43,6 +48,10 @@ public sealed class TaskCommandService(TaskDbContext dbContext)
         task.Title = title;
         task.IsCompleted = isCompleted;
         await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogInformation(
+            "Updated task {TaskId}; completion state: {IsCompleted}",
+            task.Id,
+            task.IsCompleted);
 
         return new TaskSummary(
             task.Id,
@@ -65,6 +74,9 @@ public sealed class TaskCommandService(TaskDbContext dbContext)
 
         dbContext.Tasks.Remove(task);
         await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogInformation(
+            "Deleted task {TaskId}",
+            task.Id);
 
         return true;
     }
