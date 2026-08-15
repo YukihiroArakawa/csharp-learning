@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using TaskManagementApi.Data;
 using TaskManagementApi.Models;
+using TaskManagementApi.Options;
 using TaskManagementApi.Services;
 
 SQLitePCL.Batteries_V2.Init();
@@ -16,6 +18,16 @@ builder.Services.AddDbContext<TaskDbContext>(options =>
     options.UseSqlite(connectionString));
 builder.Services.AddScoped<TaskQueryService>();
 builder.Services.AddScoped<TaskCommandService>();
+builder.Services
+    .AddOptions<TaskApiOptions>()
+    .Bind(builder.Configuration.GetSection(TaskApiOptions.SectionName))
+    .Validate(options => options.DefaultPageSize >= 1,
+        "TaskApi:DefaultPageSize must be at least 1.")
+    .Validate(options => options.MaxPageSize is >= 1 and <= 500,
+        "TaskApi:MaxPageSize must be between 1 and 500.")
+    .Validate(options => options.DefaultPageSize <= options.MaxPageSize,
+        "TaskApi:DefaultPageSize must not exceed TaskApi:MaxPageSize.")
+    .ValidateOnStart();
 builder.Services.AddProblemDetails(options =>
 {
     options.CustomizeProblemDetails = context =>
@@ -120,10 +132,13 @@ app.MapGet("/tasks/{id:int}", async Task<IResult> (
 
 app.MapGet("/tasks", async Task<IResult> (
     TaskQueryService taskQueryService,
+    IOptions<TaskApiOptions> options,
     CancellationToken cancellationToken,
     int page = 1,
-    int pageSize = 20) =>
+    int? pageSize = null) =>
 {
+    var settings = options.Value;
+    var effectivePageSize = pageSize ?? settings.DefaultPageSize;
     var errors = new Dictionary<string, string[]>();
 
     if (page < 1)
@@ -131,9 +146,10 @@ app.MapGet("/tasks", async Task<IResult> (
         errors[nameof(page)] = ["pageは1以上を指定してください。"];
     }
 
-    if (pageSize is < 1 or > 100)
+    if (effectivePageSize < 1 || effectivePageSize > settings.MaxPageSize)
     {
-        errors[nameof(pageSize)] = ["pageSizeは1以上100以下を指定してください。"];
+        errors[nameof(pageSize)] =
+            [$"pageSizeは1以上{settings.MaxPageSize}以下を指定してください。"];
     }
 
     if (errors.Count > 0)
@@ -143,7 +159,7 @@ app.MapGet("/tasks", async Task<IResult> (
 
     var result = await taskQueryService.GetTasksAsync(
         page,
-        pageSize,
+        effectivePageSize,
         cancellationToken);
 
     return Results.Ok(result);
