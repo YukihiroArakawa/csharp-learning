@@ -20,7 +20,7 @@
       <p>
         今回はauthentication providerを実際には追加しません。JWTを安全に検証するにはissuer、audience、署名鍵、
         token発行元などの実環境情報が必要であり、それらを持たない偽のlogin処理には実務上の学習価値が低いためです。
-        代わりに、現場の認証設定を読んだときに「誰であるかの確定」と「その人に操作を許すかの判断」を追跡できることを目指します。
+        代わりに、既存アプリケーションの認証設定を読んだときに「誰であるかの確定」と「その人に操作を許すかの判断」を追跡できることを目指します。
       </p>
     </section>
 
@@ -161,7 +161,7 @@ app.MapPost("/tasks", CreateTask)
       </table>
       <p>
         application codeの変更はありません。実在するissuerやtoken発行元が決まっていない状態では、安全な認証設定を完成できないためです。
-        上のcodeは現場の設定を読むための最小例であり、今回の<code>MinimalApiSample</code>には追加していません。
+        上のcodeは既存アプリケーションの設定を読むための最小例であり、今回の<code>MinimalApiSample</code>には追加していません。
       </p>
     </section>
 

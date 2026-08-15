@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | `main` + ApplicationContext | `WebApplicationBuilder` / Generic Host | 起動時にサービスとパイプラインを組み立てる |
 | Filter / Interceptor | Middleware / Filter | middleware の登録順がリクエスト処理順を決める |
-| `@RestController` | Controller または Minimal API | 現場の採用スタイルに合わせる。両方を読めるようにする |
+| `@RestController` | Controller または Minimal API | 両方の構造と使い分けを読めるようにする |
 | Spring DI | 組み込み DI (`AddSingleton` / `AddScoped` / `AddTransient`) | lifetime、特に scoped を理解する |
 | `application.yml` / `@ConfigurationProperties` | `appsettings.json` + environment variables + Options | プロバイダーの優先順位と環境別設定 |
 | `@ControllerAdvice` | Exception-handling middleware / Problem Details | エラー形式を一箇所で統一する |
@@ -15,7 +15,7 @@
 ## 順番
 
 1. Minimal API で GET/POST の小さな API を作り、route、binding、validation、HTTP ステータスを確認する。
-2. 同じ API を Controller 形式で読み、現場で用いられている形式を選ぶ。
+2. 同じ API を Controller 形式で読み、Minimal API との構造の違いを比較する。
 3. middleware を一つ追加し、順序を変えたときの差を確認する。
 4. `ProblemDetails` による例外処理、認証・認可、OpenAPI を追加する。
 

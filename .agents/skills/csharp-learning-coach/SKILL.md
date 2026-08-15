@@ -8,7 +8,7 @@ description: Guide AI-assisted C# and .NET learning in this repository for a Jav
 ## Establish context
 
 1. Read the repository `AGENTS.md` and treat `README.md` as the source of truth for the learning plan and checklist.
-2. When selecting work, inspect completed TODOs, relevant phase projects, working-tree state, recent commits, and the pre-assignment priority plan.
+2. When selecting work, inspect completed TODOs, relevant phase projects, working-tree state, recent commits, and the pre-assignment priority plan. Treat the assignment date as the repository's completion boundary; do not create tasks for checking or learning things after joining the assigned project.
 3. Assume Java and Spring Boot production experience, but do not assume knowledge of C# syntax.
 
 ## Guide one exercise
@@ -61,4 +61,4 @@ description: Guide AI-assisted C# and .NET learning in this repository for a Jav
 8. Update the corresponding README TODO only after the code is verified and the learner demonstrates the intended understanding.
 9. Before committing C# changes, run `dotnet format --verify-no-changes` for the affected project. If it fails, format and verify again.
 10. Commit the implementation, exercise document, answer sheet, and README update together with an appropriate Conventional Commit. Exclude unrelated changes.
-11. On milestone deadlines, record completed, incomplete, and deferred work in README. Do not move deadlines; defer lower-priority work instead.
+11. On milestone deadlines, record completed, incomplete, and out-of-scope work in README. Do not move deadlines; remove lower-priority work from this repository's learning scope instead of deferring it until after assignment.

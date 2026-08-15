@@ -166,7 +166,7 @@ public ActionResult&lt;TaskItem&gt; Create([FromBody] CreateTaskRequest request)
       <p>
         endpoint数が多いという理由だけでControllerへ変える必要はありません。Minimal APIもroute groupや別method・別fileへ分割できます。
         逆に、既存Controller projectを「新しい形式だから」という理由だけでMinimal APIへ全面移行する必要もありません。
-        現場では既存規約と必要なframework機能を確認して選びます。
+        プロジェクトの規模、既存規約、必要なframework機能を基準に選びます。
       </p>
     </section>
 
