@@ -1,5 +1,5 @@
 {
-  description = "C# 学習 1: 言語差分と Neovim LSP";
+  description = "C# 学習 1: 言語差分とC#編集支援";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

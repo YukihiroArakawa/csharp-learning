@@ -45,7 +45,7 @@ Java の基礎（オブジェクト指向、HTTP、DI、ORM、テスト）は既
 2. フェーズ2の最小縦切り: Worker で Host、DI、設定、Options、ログ、停止時キャンセルを一度につなげる。
 3. フェーズ3の最小縦切り: Minimal API でHTTP入力から検証・エラー応答・OpenAPIまでをつなげる。
 4. 余裕がある場合だけフェーズ4: EF Core、migration、SQL変換、テストを扱う。
-5. capstone、認証認可の深掘り、Controller形式の比較、Neovim DAPの作り込みは配属後の現場コードを題材にする。
+5. capstone、認証認可の深掘り、Controller形式の比較は配属後の現場コードを題材にする。
 
 ### 毎回の進め方
 
@@ -112,7 +112,7 @@ dotnet --info
 | フェーズ | 依存関係 | 追加する理由 |
 | --- | --- | --- |
 | `00-environment` | `dotnet-sdk_10` | CLI、テンプレート、ビルド、テストを試す |
-| `01-csharp-differences` | SDK + `csharp-ls` | 言語サンプルを Neovim で読む・書く |
+| `01-csharp-differences` | SDK + `csharp-ls` | 言語サンプルのC#編集支援を有効にする |
 | `02-dotnet-foundations` | SDK + LSP + `netcoredbg` | Worker の起動・停止をデバッグする |
 | `03-aspnet-core` | SDK + LSP + デバッガ | HTTP リクエストを受ける API をデバッグする |
 | `04-data-and-testing` | SDK + LSP + デバッガ + `sqlite` | EF Core が作る SQLite DB と migration を観察する |
@@ -136,17 +136,6 @@ git config --local core.hooksPath .githooks
 ```bash
 dotnet format TypeSystemSamples/TypeSystemSamples.csproj
 ```
-
-### Neovim のセットアップ
-
-フル IDE は不要です。対象フェーズで direnv により環境を有効にした状態で Neovim を起動し、C# ファイルを開くと `csharp-ls` が attach する構成にします。既存の Neovim 設定で `csharp-ls` は有効になっています。
-
-- [ ] `01-csharp-differences` で `direnv allow` を実行し、`dotnet --info` と `csharp-ls --version` を実行する。
-- [ ] `02-dotnet-foundations` で `netcoredbg --version` を実行する。
-- [ ] `*.cs` ファイルを開き、`:checkhealth vim.lsp` で LSP の状態を確認する。
-- [ ] `gd`（定義ジャンプ）、`gr`（参照検索）、`K`（ホバー）、`<leader>rn`（リネーム）、`<leader>ca`（コードアクション）を試す。
-- [ ] Neovim の DAP プラグインを導入・設定し、`netcoredbg` で Console アプリにブレークポイントを張る。
-- [ ] `:make` または Neovim のターミナルから `dotnet test` を実行し、失敗箇所へ移動できるようにする。
 
 ## TODO リスト
 
